@@ -17,6 +17,7 @@ import settingsRouter from './routes/settings.js';
 import metricsRouter from './routes/metrics.js';
 import authRouter from './routes/auth.js';
 import usersRouter from './routes/users.js';
+import techniciansRouter from './routes/technicians.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -43,6 +44,7 @@ app.get('/api/health', (req, res) => {
 // Mount Routes
 app.use('/api/auth', authRouter);
 app.use('/api/users', usersRouter);
+app.use('/api/technicians', techniciansRouter);
 app.use('/api/customers', customersRouter);
 app.use('/api/job-cards', jobCardsRouter);
 app.use('/api/quotations', quotationsRouter);

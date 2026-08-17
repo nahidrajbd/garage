@@ -14,13 +14,17 @@ import {
   UserCheck,
   Key,
   Lock,
-  UserPlus
+  UserPlus,
+  UserCog,
+  Phone,
+  Edit2,
+  Check
 } from 'lucide-react';
 import { ConfirmDialog } from '../components/common/ConfirmDialog';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
-import { Settings, ServiceItem, User, UserRole } from '../types';
+import { Settings, ServiceItem, User, UserRole, Technician } from '../types';
 import { formatBDT } from '../utils/formatters';
 
 export const SettingsPage: React.FC = () => {
@@ -31,6 +35,7 @@ export const SettingsPage: React.FC = () => {
   const [services, setServices] = useState<ServiceItem[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [usersList, setUsersList] = useState<User[]>([]);
+  const [technicians, setTechnicians] = useState<Technician[]>([]);
   const [loading, setLoading] = useState(true);
 
   // New Service state
@@ -40,6 +45,15 @@ export const SettingsPage: React.FC = () => {
 
   // New Category state
   const [newCategoryName, setNewCategoryName] = useState('');
+
+  // Technicians state
+  const [newTechName, setNewTechName] = useState('');
+  const [newTechSpecialty, setNewTechSpecialty] = useState('');
+  const [newTechPhone, setNewTechPhone] = useState('');
+  const [editingTech, setEditingTech] = useState<Technician | null>(null);
+  const [editTechName, setEditTechName] = useState('');
+  const [editTechSpecialty, setEditTechSpecialty] = useState('');
+  const [editTechPhone, setEditTechPhone] = useState('');
 
   // New User state (Super Admin only)
   const [newUserName, setNewUserName] = useState('');
@@ -60,15 +74,17 @@ export const SettingsPage: React.FC = () => {
     const loadSettings = async () => {
       setLoading(true);
       try {
-        const promises: [Promise<Settings>, Promise<ServiceItem[]>, Promise<string[]>] = [
+        const promises: [Promise<Settings>, Promise<ServiceItem[]>, Promise<string[]>, Promise<Technician[]>] = [
           api.getSettings(),
           api.getServices(),
-          api.getExpenseCategories()
+          api.getExpenseCategories(),
+          api.getTechnicians()
         ];
-        const [sett, srvs, cats] = await Promise.all(promises);
+        const [sett, srvs, cats, techs] = await Promise.all(promises);
         setSettings(sett);
         setServices(srvs);
         setCategories(cats);
+        setTechnicians(techs);
 
         if (canManageUsers) {
           try {
@@ -86,6 +102,70 @@ export const SettingsPage: React.FC = () => {
     };
     loadSettings();
   }, [canManageUsers]);
+
+  // Technician Handlers
+  const handleAddTechnician = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTechName.trim()) return;
+    try {
+      const created = await api.createTechnician({
+        name: newTechName.trim(),
+        specialty: newTechSpecialty.trim(),
+        phone: newTechPhone.trim()
+      });
+      setTechnicians(prev => [...prev, created]);
+      setNewTechName('');
+      setNewTechSpecialty('');
+      setNewTechPhone('');
+      showToast(`Technician "${created.name}" added successfully!`, 'success');
+      triggerRefresh();
+    } catch (err: any) {
+      console.error(err);
+      showToast(err.message || 'Failed to add technician', 'error');
+    }
+  };
+
+  const handleStartEditTech = (tech: Technician) => {
+    setEditingTech(tech);
+    setEditTechName(tech.name);
+    setEditTechSpecialty(tech.specialty || '');
+    setEditTechPhone(tech.phone || '');
+  };
+
+  const handleUpdateTechnician = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingTech || !editTechName.trim()) return;
+    try {
+      const updated = await api.updateTechnician(editingTech.id, {
+        name: editTechName.trim(),
+        specialty: editTechSpecialty.trim(),
+        phone: editTechPhone.trim()
+      });
+      setTechnicians(prev => prev.map(t => t.id === updated.id ? updated : t));
+      setEditingTech(null);
+      showToast(`Technician "${updated.name}" updated successfully!`, 'success');
+      triggerRefresh();
+    } catch (err: any) {
+      console.error(err);
+      showToast(err.message || 'Failed to update technician', 'error');
+    }
+  };
+
+  const handleDeleteTechnician = async (id: string, name: string) => {
+    if (!canDelete) {
+      showToast('Staff users are not permitted to delete technicians.', 'error');
+      return;
+    }
+    try {
+      await api.deleteTechnician(id);
+      setTechnicians(prev => prev.filter(t => t.id !== id));
+      showToast(`Technician "${name}" removed`, 'info');
+      triggerRefresh();
+    } catch (err: any) {
+      console.error(err);
+      showToast(err.message || 'Failed to delete technician', 'error');
+    }
+  };
 
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -657,7 +737,132 @@ export const SettingsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* 4. Expense Categories Management */}
+      {/* 4. Workshop Technicians & Staff Management */}
+      <div className="bg-white p-5 sm:p-6 rounded-2xl border border-gray-200/80 shadow-2xs space-y-5">
+        <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-red-50 text-red-600 flex items-center justify-center">
+              <UserCog className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider font-heading">
+                Workshop Technicians & Specialists
+              </h3>
+              <p className="text-xs text-gray-500">
+                Add, rename, and manage technicians available for Job Card assignment.
+              </p>
+            </div>
+          </div>
+          <span className="text-xs font-mono font-semibold text-gray-500 bg-gray-100 px-2.5 py-1 rounded-lg">
+            {technicians.length} Technicians
+          </span>
+        </div>
+
+        {/* Add Technician Form */}
+        <form onSubmit={handleAddTechnician} className="p-4 bg-gray-50/80 rounded-2xl border border-gray-200 space-y-3">
+          <div className="flex items-center gap-2 text-xs font-bold text-gray-800 uppercase tracking-wider font-heading mb-1">
+            <Plus className="w-4 h-4 text-[#C1121F]" />
+            <span>Add New Technician</span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label className="block text-[11px] font-semibold text-gray-700 mb-1">Technician Name *</label>
+              <input
+                type="text"
+                required
+                value={newTechName}
+                onChange={e => setNewTechName(e.target.value)}
+                placeholder="e.g. Karim, Sohel, Jalal..."
+                className="w-full text-xs px-3 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-red-500 focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold text-gray-700 mb-1">Specialty / Department</label>
+              <input
+                type="text"
+                value={newTechSpecialty}
+                onChange={e => setNewTechSpecialty(e.target.value)}
+                placeholder="e.g. Engine & Mechanical, Dent/Paint, Electrical..."
+                className="w-full text-xs px-3 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-red-500 focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold text-gray-700 mb-1">Phone Number (Optional)</label>
+              <input
+                type="text"
+                value={newTechPhone}
+                onChange={e => setNewTechPhone(e.target.value)}
+                placeholder="e.g. 01712-345678"
+                className="w-full text-xs px-3 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-red-500 focus:outline-none font-mono"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end pt-1">
+            <button
+              type="submit"
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-[#C1121F] hover:bg-[#A30F1A] rounded-xl transition-all shadow-xs cursor-pointer font-heading uppercase tracking-wider"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>Add Technician</span>
+            </button>
+          </div>
+        </form>
+
+        {/* Technicians List Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          {technicians.map(tech => (
+            <div
+              key={tech.id}
+              className="p-4 rounded-xl border border-gray-200 bg-white hover:border-gray-300 hover:shadow-xs transition-all flex flex-col justify-between gap-3"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <h4 className="text-sm font-bold text-gray-900 font-heading">{tech.name}</h4>
+                  {tech.specialty && (
+                    <span className="inline-block mt-1 px-2 py-0.5 bg-red-50 text-red-700 text-[11px] font-medium rounded-md border border-red-100">
+                      {tech.specialty}
+                    </span>
+                  )}
+                  {tech.phone && (
+                    <div className="flex items-center gap-1.5 text-xs text-gray-500 mt-2 font-mono">
+                      <Phone className="w-3 h-3 text-gray-400" />
+                      <span>{tech.phone}</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => handleStartEditTech(tech)}
+                    title="Rename or Edit Details"
+                    className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                  </button>
+
+                  {canDelete && (
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteTechnician(tech.id, tech.name)}
+                      title="Delete Technician"
+                      className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* 5. Expense Categories Management */}
       <div className="bg-white p-5 rounded-2xl border border-gray-200/80 shadow-2xs space-y-4">
         <div className="flex items-center justify-between pb-3 border-b border-gray-100">
           <div className="flex items-center gap-2">
@@ -709,6 +914,71 @@ export const SettingsPage: React.FC = () => {
           ))}
         </div>
       </div>
+
+      {/* Edit Technician Dialog */}
+      {editingTech && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border border-gray-100 space-y-4">
+            <div className="flex items-center gap-2 text-gray-900 font-bold font-heading">
+              <UserCog className="w-5 h-5 text-[#C1121F]" />
+              <span>Edit Technician Details</span>
+            </div>
+
+            <form onSubmit={handleUpdateTechnician} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Technician Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={editTechName}
+                  onChange={e => setEditTechName(e.target.value)}
+                  placeholder="Technician full name"
+                  className="w-full text-xs px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Specialty / Department</label>
+                <input
+                  type="text"
+                  value={editTechSpecialty}
+                  onChange={e => setEditTechSpecialty(e.target.value)}
+                  placeholder="e.g. Engine & Mechanical, Dent & Paint..."
+                  className="w-full text-xs px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Phone Number</label>
+                <input
+                  type="text"
+                  value={editTechPhone}
+                  onChange={e => setEditTechPhone(e.target.value)}
+                  placeholder="e.g. 01712-345678"
+                  className="w-full text-xs px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:outline-none font-mono"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingTech(null)}
+                  className="px-3.5 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 rounded-xl cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-[#C1121F] hover:bg-[#A30F1A] rounded-xl cursor-pointer font-heading uppercase tracking-wider shadow-xs"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Save Changes</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Password Reset Dialog */}
       {selectedUserForReset && (

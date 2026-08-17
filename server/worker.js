@@ -446,6 +446,82 @@ export default {
     }
 
     // ----------------------------------------------------
+    // TECHNICIANS (WORKSHOP STAFF)
+    // ----------------------------------------------------
+    if (path === '/api/technicians' && method === 'GET') {
+      try {
+        const technicians = await withDb(env, async (conn) => {
+          const [rows] = await conn.query(
+            'SELECT id, name, specialty, phone, status, created_at FROM technicians WHERE status = "active" ORDER BY name ASC'
+          );
+          return rows.map(r => ({
+            id: r.id,
+            name: r.name,
+            specialty: r.specialty || '',
+            phone: r.phone || '',
+            status: r.status,
+            createdAt: r.created_at,
+          }));
+        });
+        return jsonResponse(technicians, 200, corsHeaders);
+      } catch (err) {
+        return jsonResponse({ error: err.message }, 500, corsHeaders);
+      }
+    }
+
+    if (path === '/api/technicians' && method === 'POST') {
+      try {
+        const { name, specialty, phone } = await request.json();
+        if (!name || !name.trim()) return jsonResponse({ error: 'Technician name is required' }, 400, corsHeaders);
+        const id = `tech-${Date.now()}`;
+        const created = await withDb(env, async (conn) => {
+          await conn.query(
+            'INSERT INTO technicians (id, name, specialty, phone, status, created_at) VALUES (?, ?, ?, ?, "active", NOW())',
+            [id, name.trim(), specialty?.trim() || null, phone?.trim() || null]
+          );
+          return { id, name: name.trim(), specialty: specialty?.trim() || '', phone: phone?.trim() || '', status: 'active' };
+        });
+        return jsonResponse(created, 201, corsHeaders);
+      } catch (err) {
+        return jsonResponse({ error: err.message }, 500, corsHeaders);
+      }
+    }
+
+    if (path.match(/^\/api\/technicians\/[^/]+$/) && method === 'PUT') {
+      try {
+        const id = path.split('/')[3];
+        const { name, specialty, phone } = await request.json();
+        if (!name || !name.trim()) return jsonResponse({ error: 'Technician name is required' }, 400, corsHeaders);
+        const updated = await withDb(env, async (conn) => {
+          await conn.query(
+            'UPDATE technicians SET name = ?, specialty = ?, phone = ?, updated_at = NOW() WHERE id = ?',
+            [name.trim(), specialty?.trim() || null, phone?.trim() || null, id]
+          );
+          return { id, name: name.trim(), specialty: specialty?.trim() || '', phone: phone?.trim() || '', status: 'active' };
+        });
+        return jsonResponse(updated, 200, corsHeaders);
+      } catch (err) {
+        return jsonResponse({ error: err.message }, 500, corsHeaders);
+      }
+    }
+
+    if (path.match(/^\/api\/technicians\/[^/]+$/) && method === 'DELETE') {
+      const user = getUser(request, env);
+      if (user && user.role === 'staff') {
+        return jsonResponse({ error: 'Staff users are not permitted to delete technicians.' }, 403, corsHeaders);
+      }
+      try {
+        const id = path.split('/')[3];
+        await withDb(env, async (conn) => {
+          await conn.query('UPDATE technicians SET status = "inactive", updated_at = NOW() WHERE id = ?', [id]);
+        });
+        return jsonResponse({ success: true, message: 'Technician deleted successfully' }, 200, corsHeaders);
+      } catch (err) {
+        return jsonResponse({ error: err.message }, 500, corsHeaders);
+      }
+    }
+
+    // ----------------------------------------------------
     // CUSTOMERS
     // ----------------------------------------------------
     if (path === '/api/customers' && method === 'GET') {

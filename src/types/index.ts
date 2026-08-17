@@ -15,6 +15,15 @@ export interface AuthSession {
   user: User;
 }
 
+export interface Technician {
+  id: string;
+  name: string;
+  specialty?: string;
+  phone?: string;
+  status: 'active' | 'inactive';
+  createdAt?: string;
+}
+
 export type PaymentMethod = 'Cash' | 'bKash' | 'Bank';
 
 export type InvoiceStatus = 'Paid' | 'Partial' | 'Due';

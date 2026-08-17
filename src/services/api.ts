@@ -19,7 +19,8 @@ import {
   InventoryCategory,
   InventoryItem,
   StockMovement,
-  InventorySummary
+  InventorySummary,
+  Technician
 } from '../types';
 import { initialStaff } from '../mock/initialData';
 
@@ -292,7 +293,47 @@ export const api = {
     });
   },
 
+  // Technicians (Workshop Staff)
+  async getTechnicians(): Promise<Technician[]> {
+    try {
+      return await request<Technician[]>('/technicians');
+    } catch {
+      return initialStaff.map((name, i) => ({
+        id: `tech-${i + 1}`,
+        name,
+        specialty: 'Workshop Specialist',
+        phone: '',
+        status: 'active'
+      }));
+    }
+  },
+
+  async createTechnician(data: { name: string; specialty?: string; phone?: string }): Promise<Technician> {
+    return request<Technician>('/technicians', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async updateTechnician(id: string, data: { name: string; specialty?: string; phone?: string }): Promise<Technician> {
+    return request<Technician>(`/technicians/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async deleteTechnician(id: string): Promise<boolean> {
+    await request(`/technicians/${id}`, { method: 'DELETE' });
+    return true;
+  },
+
   async getStaffList(): Promise<string[]> {
+    try {
+      const techs = await this.getTechnicians();
+      if (techs && techs.length > 0) {
+        return techs.map(t => t.specialty ? `${t.name} (${t.specialty})` : t.name);
+      }
+    } catch {}
     return initialStaff;
   },
 

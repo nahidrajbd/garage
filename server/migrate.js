@@ -231,6 +231,23 @@ async function migrate() {
     );
     console.log('✅ Seeded users: admin (super_admin) & staff (staff).');
 
+    // Seed Technicians
+    console.log('🔄 Checking technicians...');
+    const defaultTechs = [
+      { id: 'tech-1', name: 'Karim', specialty: 'Engine & Mechanical', phone: '01712-111222' },
+      { id: 'tech-2', name: 'Sohel', specialty: 'Dent & Paint', phone: '01819-333444' },
+      { id: 'tech-3', name: 'Jalal', specialty: 'Electrical & AC', phone: '01911-555666' }
+    ];
+    for (const t of defaultTechs) {
+      await connection.query(
+        `INSERT INTO technicians (id, name, specialty, phone, status, created_at)
+         VALUES (?, ?, ?, ?, 'active', NOW())
+         ON DUPLICATE KEY UPDATE name = VALUES(name), specialty = VALUES(specialty), phone = VALUES(phone), status = 'active'`,
+        [t.id, t.name, t.specialty, t.phone]
+      );
+    }
+    console.log('✅ Technicians seeded.');
+
     console.log('🎉 Migration and initial seeding completed successfully!');
   } catch (error) {
     console.error('❌ Migration error:', error.message);
