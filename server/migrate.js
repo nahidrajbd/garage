@@ -30,7 +30,33 @@ async function migrate() {
     const schemaSql = fs.readFileSync(path.resolve(__dirname, 'schema.sql'), 'utf-8');
     console.log('🔄 Executing schema migrations...');
     await connection.query(schemaSql);
-    console.log('✅ All 19 relational tables created or verified successfully!');
+    console.log('✅ All relational tables created or verified successfully!');
+
+    // Ensure all required columns exist on job_cards table
+    const [existingCols] = await connection.query(`
+      SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'job_cards'
+    `);
+    const colNames = existingCols.map(c => c.COLUMN_NAME);
+    if (!colNames.includes('expected_delivery_date')) {
+      await connection.query('ALTER TABLE job_cards ADD COLUMN expected_delivery_date DATE NULL AFTER date');
+    }
+    if (!colNames.includes('customer_complaint')) {
+      await connection.query('ALTER TABLE job_cards ADD COLUMN customer_complaint TEXT NULL AFTER status');
+    }
+    if (!colNames.includes('vehicle_condition')) {
+      await connection.query('ALTER TABLE job_cards ADD COLUMN vehicle_condition TEXT NULL AFTER customer_complaint');
+    }
+    if (!colNames.includes('assigned_to')) {
+      await connection.query('ALTER TABLE job_cards ADD COLUMN assigned_to VARCHAR(191) NULL');
+    }
+    if (!colNames.includes('quotation_id')) {
+      await connection.query('ALTER TABLE job_cards ADD COLUMN quotation_id VARCHAR(50) NULL');
+    }
+    if (!colNames.includes('invoice_id')) {
+      await connection.query('ALTER TABLE job_cards ADD COLUMN invoice_id VARCHAR(50) NULL');
+    }
+    console.log('✅ job_cards table schema synchronized with all columns.');
 
     // Seed Settings
     console.log('🔄 Checking settings...');
