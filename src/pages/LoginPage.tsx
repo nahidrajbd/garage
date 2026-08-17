@@ -4,13 +4,10 @@ import {
   Wrench, 
   Lock, 
   User, 
-  ShieldCheck, 
-  UserCheck, 
   ArrowRight, 
   AlertCircle,
   Eye,
   EyeOff,
-  Sparkles,
   MapPin,
   Phone
 } from 'lucide-react';
@@ -186,56 +183,6 @@ export const LoginPage: React.FC = () => {
               )}
             </button>
           </form>
-
-          {/* Quick Demo Access Switcher */}
-          <div className="mt-8 pt-6 border-t border-neutral-800">
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-400 mb-3 uppercase tracking-wider font-heading">
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              <span>Quick Demo Credentials</span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2.5">
-              {/* Super Admin Preset */}
-              <button
-                type="button"
-                onClick={() => handleQuickFill('admin', 'admin123')}
-                className="p-3 rounded-xl bg-neutral-900/90 hover:bg-neutral-800 border border-neutral-700/80 text-left transition-all group cursor-pointer hover:border-red-600/50"
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-red-400">
-                    <ShieldCheck className="w-3.5 h-3.5" />
-                    <span>Super Admin</span>
-                  </div>
-                </div>
-                <div className="text-[11px] text-gray-400 font-mono">
-                  admin / admin123
-                </div>
-                <div className="text-[10px] text-gray-500 mt-1">
-                  Full control & delete access
-                </div>
-              </button>
-
-              {/* Staff Preset */}
-              <button
-                type="button"
-                onClick={() => handleQuickFill('staff', 'staff123')}
-                className="p-3 rounded-xl bg-neutral-900/90 hover:bg-neutral-800 border border-neutral-700/80 text-left transition-all group cursor-pointer hover:border-blue-500/50"
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-blue-400">
-                    <UserCheck className="w-3.5 h-3.5" />
-                    <span>Staff</span>
-                  </div>
-                </div>
-                <div className="text-[11px] text-gray-400 font-mono">
-                  staff / staff123
-                </div>
-                <div className="text-[10px] text-gray-500 mt-1">
-                  Create/edit (no delete)
-                </div>
-              </button>
-            </div>
-          </div>
         </div>
       </main>
 

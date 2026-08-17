@@ -23,7 +23,7 @@ import {
 } from '../types';
 import { initialStaff } from '../mock/initialData';
 
-const BASE_URL = '/api';
+const BASE_URL = import.meta.env.VITE_API_URL || '/api';
 const TOKEN_KEY = 'nextgarage_auth_token';
 
 export function getAuthToken(): string | null {
