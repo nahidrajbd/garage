@@ -219,14 +219,14 @@ async function migrate() {
     await connection.query(
       `INSERT INTO users (id, name, username, password_hash, role, status, created_at)
        VALUES (?, ?, ?, ?, ?, 'active', NOW())
-       ON DUPLICATE KEY UPDATE name = VALUES(name), role = VALUES(role), status = 'active'`,
+       ON DUPLICATE KEY UPDATE name = VALUES(name), role = VALUES(role), password_hash = VALUES(password_hash), status = 'active'`,
       ['usr-superadmin', 'Super Admin', 'admin', adminPasswordHash, 'super_admin']
     );
 
     await connection.query(
       `INSERT INTO users (id, name, username, password_hash, role, status, created_at)
        VALUES (?, ?, ?, ?, ?, 'active', NOW())
-       ON DUPLICATE KEY UPDATE name = VALUES(name), role = VALUES(role), status = 'active'`,
+       ON DUPLICATE KEY UPDATE name = VALUES(name), role = VALUES(role), password_hash = VALUES(password_hash), status = 'active'`,
       ['usr-staff', 'Service Staff', 'staff', staffPasswordHash, 'staff']
     );
     console.log('✅ Seeded users: admin (super_admin) & staff (staff).');

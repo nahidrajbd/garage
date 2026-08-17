@@ -1,8 +1,17 @@
 name = "nextgarage"
 main = "server/worker.js"
 compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
 
 [assets]
 directory = "./dist"
 binding = "ASSETS"
 not_found_handling = "single-page-application"
+
+[vars]
+DB_HOST = "165.99.74.72"
+DB_PORT = "3306"
+DB_NAME = "nextpostmedia_garage"
+DB_USER = "nextpostmedia"
+DB_PASSWORD = "ycs-iymH3ybo"
+JWT_SECRET = "nextgarage_super_secret_jwt_key_2026"
