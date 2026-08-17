@@ -1,0 +1,249 @@
+export type PaymentMethod = 'Cash' | 'bKash' | 'Bank';
+
+export type InvoiceStatus = 'Paid' | 'Partial' | 'Due';
+
+export type QuotationStatus = 
+  | 'Draft'
+  | 'Sent'
+  | 'Accepted'
+  | 'Rejected'
+  | 'Expired'
+  | 'Converted';
+
+export type JobCardStatus = 
+  | 'Waiting'
+  | 'In Progress'
+  | 'Completed'
+  | 'Delivered'
+  | 'Cancelled';
+
+export type CashInType = 'Service Payment' | 'Loan from MD' | 'Other Income';
+
+export type ExpenseCategory = 
+  | 'Salary'
+  | 'Purchase'
+  | 'Food'
+  | 'Rent'
+  | 'Loan Repayment'
+  | 'Other';
+
+export interface Customer {
+  id: string;
+  name: string;
+  phone: string;
+  address?: string;
+  vehicles: Vehicle[];
+  totalVisits: number;
+  lastServiceDate: string;
+  createdAt: string;
+}
+
+export interface Vehicle {
+  id: string;
+  customerId?: string;
+  registrationNumber: string; // e.g. "Rajshahi Metro-Ga 11-2345"
+  model: string;              // e.g. "Toyota Axio"
+  color?: string;
+  year?: string;
+  mileage?: string | number;
+}
+
+export interface ServiceItem {
+  id: string;
+  name: string;
+  defaultPrice: number;
+  category?: string;
+  description?: string;
+}
+
+export interface InvoiceItem {
+  id: string;
+  serviceId?: string;
+  serviceName: string;
+  price: number;
+  quantity: number;
+}
+
+export interface Invoice {
+  id: string;
+  invoiceNumber: string;
+  date: string;               // YYYY-MM-DD
+  customerId?: string;
+  customerName: string;
+  customerPhone: string;
+  vehicleRegistration: string;
+  vehicleModel: string;
+  items: InvoiceItem[];
+  subtotal: number;
+  discount: number;
+  grandTotal: number;
+  paid: number;
+  due: number;
+  status: InvoiceStatus;
+  paymentMethod: PaymentMethod;
+  notes?: string;
+  quotationId?: string;
+  quotationNumber?: string;
+  convertedFromQuotation?: boolean;
+  jobCardId?: string;
+  jobCardNumber?: string;
+  createdAt: string;
+}
+
+export interface QuotationItem {
+  id: string;
+  quotationId?: string;
+  serviceName: string;
+  description?: string;
+  quantity: number;
+  unitPrice: number;
+  total: number;
+}
+
+export interface Quotation {
+  id: string;
+  quotationNumber: string;    // e.g. "QT-0001"
+  customerId?: string;
+  vehicleId?: string;
+  customerName: string;
+  customerPhone: string;
+  vehicleRegistration: string;
+  vehicleModel: string;
+  date: string;               // YYYY-MM-DD
+  validUntil: string;         // YYYY-MM-DD
+  status: QuotationStatus;
+  items: QuotationItem[];
+  subtotal: number;
+  discount: number;
+  grandTotal: number;
+  notes?: string;
+  terms?: string;
+  createdAt: string;
+  updatedAt?: string;
+  convertedInvoiceId?: string;
+  convertedInvoiceNumber?: string;
+  jobCardId?: string;
+  jobCardNumber?: string;
+}
+
+export interface JobCardWorkItem {
+  id: string;
+  jobCardId?: string;
+  serviceName: string;
+  description?: string;
+}
+
+export interface JobCard {
+  id: string;
+  jobCardNumber: string;      // e.g. "JC-0001"
+  customerId?: string;
+  vehicleId?: string;
+  customerName: string;
+  customerPhone: string;
+  vehicleRegistration: string;
+  vehicleModel: string;
+  mileage?: string | number;
+  date: string;               // YYYY-MM-DD
+  expectedDeliveryDate?: string; // YYYY-MM-DD
+  status: JobCardStatus;
+  customerComplaint: string;
+  requiredWork: JobCardWorkItem[];
+  vehicleCondition?: string;
+  assignedTo: string;         // Technician 1, Service Team, etc.
+  beforePhotos?: string[];
+  afterPhotos?: string[];
+  notes?: string;
+  quotationId?: string;
+  quotationNumber?: string;
+  invoiceId?: string;
+  invoiceNumber?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+
+export interface CashIn {
+  id: string;
+  date: string;               // YYYY-MM-DD
+  time: string;               // HH:MM AM/PM
+  type: CashInType;
+  description: string;
+  reference?: string;         // e.g. "INV-001" or "MD Inflow"
+  paymentMethod: PaymentMethod;
+  amount: number;
+  invoiceId?: string;
+  customerName?: string;
+  vehicleInfo?: string;
+  note?: string;
+  createdAt: string;
+}
+
+export interface Expense {
+  id: string;
+  date: string;               // YYYY-MM-DD
+  time: string;               // HH:MM AM/PM
+  category: ExpenseCategory;
+  description: string;
+  paymentMethod: PaymentMethod;
+  amount: number;
+  note?: string;
+  recipient?: string;
+  createdAt: string;
+}
+
+export interface LoanRecord {
+  id: string;
+  date: string;
+  time: string;
+  type: 'Received' | 'Repayment';
+  amount: number;
+  paymentMethod: PaymentMethod;
+  note?: string;
+  createdAt: string;
+}
+
+export interface LoanSummary {
+  totalReceived: number;
+  totalRepaid: number;
+  remaining: number;
+}
+
+export interface Transaction {
+  id: string;
+  date: string;
+  time: string;
+  flow: 'IN' | 'OUT';
+  type: string;               // Service Payment, Salary, Purchase, etc.
+  description: string;
+  reference?: string;
+  paymentMethod: PaymentMethod;
+  amount: number;
+  sourceId?: string;
+}
+
+export interface Settings {
+  businessName: string;
+  phone: string;
+  altPhone?: string;
+  address: string;
+  email?: string;
+  invoicePrefix: string;
+  defaultFooterText: string;
+  currencySymbol: string;
+}
+
+export interface DashboardMetrics {
+  todayCashIn: number;
+  todayCashOut: number;
+  todayNet: number;
+  monthIncome: number;
+  monthExpenses: number;
+  monthNet: number;
+  totalCustomers: number;
+  totalActiveInvoices: number;
+  pendingQuotationsCount?: number;
+  activeJobCardsCount?: number;
+  waitingJobCardsCount?: number;
+  inProgressJobCardsCount?: number;
+  completedTodayJobCardsCount?: number;
+}
