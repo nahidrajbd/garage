@@ -82,10 +82,12 @@ export default {
       return new Response(null, { headers: corsHeaders });
     }
 
-    // Health check
+    // ----------------------------------------------------
+    // HEALTH CHECK
+    // ----------------------------------------------------
     if (path === '/api/health') {
       try {
-        const check = await withDb(env, async (conn) => {
+        await withDb(env, async (conn) => {
           const [rows] = await conn.query('SELECT 1 as connected');
           return rows;
         });
@@ -156,6 +158,28 @@ export default {
         });
         if (!profile) return jsonResponse({ error: 'User not found' }, 404, corsHeaders);
         return jsonResponse(profile, 200, corsHeaders);
+      } catch (err) {
+        return jsonResponse({ error: err.message }, 500, corsHeaders);
+      }
+    }
+
+    if (path === '/api/auth/change-password' && method === 'POST') {
+      const user = getUser(request, env);
+      if (!user) return jsonResponse({ error: 'Unauthorized' }, 401, corsHeaders);
+      try {
+        const { currentPassword, newPassword } = await request.json();
+        if (!currentPassword || !newPassword) {
+          return jsonResponse({ error: 'Current and new password are required' }, 400, corsHeaders);
+        }
+        await withDb(env, async (conn) => {
+          const [users] = await conn.query('SELECT password_hash FROM users WHERE id = ?', [user.id]);
+          if (users.length === 0) throw new Error('User not found');
+          const isMatch = await bcrypt.compare(currentPassword, users[0].password_hash);
+          if (!isMatch && currentPassword !== users[0].password_hash) throw new Error('Current password is incorrect');
+          const newHash = await bcrypt.hash(newPassword, 10);
+          await conn.query('UPDATE users SET password_hash = ?, updated_at = NOW() WHERE id = ?', [newHash, user.id]);
+        });
+        return jsonResponse({ success: true, message: 'Password changed successfully' }, 200, corsHeaders);
       } catch (err) {
         return jsonResponse({ error: err.message }, 500, corsHeaders);
       }
@@ -299,6 +323,129 @@ export default {
     }
 
     // ----------------------------------------------------
+    // SETTINGS & SERVICES
+    // ----------------------------------------------------
+    if (path === '/api/settings' && method === 'GET') {
+      try {
+        const settings = await withDb(env, async (conn) => {
+          const [rows] = await conn.query('SELECT setting_key, setting_value FROM settings');
+          const map = {};
+          rows.forEach(r => { map[r.setting_key] = r.setting_value; });
+          return {
+            businessName: map.business_name || 'Arshi Automobile & Car Hub',
+            phone: map.phone || '01712110902',
+            altPhone: map.alt_phone || '01712345678',
+            address: map.address || 'Bhadra Mor, Station Road, Rajshahi, Bangladesh',
+            email: map.email || 'arshi.autohub@gmail.com',
+            invoicePrefix: map.invoice_prefix || 'INV-',
+            quotationPrefix: map.quotation_prefix || 'QT-',
+            jobCardPrefix: map.job_card_prefix || 'JC-',
+            defaultFooterText: map.default_footer_text || 'Thank you for choosing Arshi Automobile & Car Hub. Quality service guaranteed.',
+            currencySymbol: map.currency_symbol || '৳',
+          };
+        });
+        return jsonResponse(settings, 200, corsHeaders);
+      } catch (err) {
+        return jsonResponse({ error: err.message }, 500, corsHeaders);
+      }
+    }
+
+    if (path === '/api/settings' && method === 'PUT') {
+      try {
+        const updates = await request.json();
+        const mapping = {
+          businessName: 'business_name',
+          phone: 'phone',
+          altPhone: 'alt_phone',
+          address: 'address',
+          email: 'email',
+          invoicePrefix: 'invoice_prefix',
+          quotationPrefix: 'quotation_prefix',
+          jobCardPrefix: 'job_card_prefix',
+          defaultFooterText: 'default_footer_text',
+          currencySymbol: 'currency_symbol',
+        };
+
+        const result = await withDb(env, async (conn) => {
+          for (const [key, val] of Object.entries(updates)) {
+            const dbKey = mapping[key] || key;
+            await conn.query(
+              `INSERT INTO settings (id, setting_key, setting_value) 
+               VALUES (?, ?, ?) 
+               ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), updated_at = NOW()`,
+              [`set_${dbKey}`, dbKey, String(val || '')]
+            );
+          }
+
+          const [rows] = await conn.query('SELECT setting_key, setting_value FROM settings');
+          const map = {};
+          rows.forEach(r => { map[r.setting_key] = r.setting_value; });
+          return {
+            businessName: map.business_name || 'Arshi Automobile & Car Hub',
+            phone: map.phone || '01712110902',
+            altPhone: map.alt_phone || '01712345678',
+            address: map.address || 'Bhadra Mor, Station Road, Rajshahi, Bangladesh',
+            email: map.email || 'arshi.autohub@gmail.com',
+            invoicePrefix: map.invoice_prefix || 'INV-',
+            quotationPrefix: map.quotation_prefix || 'QT-',
+            jobCardPrefix: map.job_card_prefix || 'JC-',
+            defaultFooterText: map.default_footer_text || 'Thank you for choosing Arshi Automobile & Car Hub. Quality service guaranteed.',
+            currencySymbol: map.currency_symbol || '৳',
+          };
+        });
+        return jsonResponse(result, 200, corsHeaders);
+      } catch (err) {
+        return jsonResponse({ error: err.message }, 500, corsHeaders);
+      }
+    }
+
+    if (path === '/api/settings/services' && method === 'GET') {
+      try {
+        const services = await withDb(env, async (conn) => {
+          const [rows] = await conn.query('SELECT id, name, category, description, default_price as defaultPrice FROM services WHERE status = "active" ORDER BY name ASC');
+          return rows.map(r => ({ ...r, defaultPrice: Number(r.defaultPrice) || 0 }));
+        });
+        return jsonResponse(services, 200, corsHeaders);
+      } catch (err) {
+        return jsonResponse({ error: err.message }, 500, corsHeaders);
+      }
+    }
+
+    if (path === '/api/settings/services' && method === 'POST') {
+      try {
+        const { name, defaultPrice = 0, category, description } = await request.json();
+        if (!name) return jsonResponse({ error: 'Service name is required' }, 400, corsHeaders);
+        const id = `srv-${Date.now()}`;
+        const price = Number(defaultPrice) || 0;
+        await withDb(env, async (conn) => {
+          await conn.query(
+            'INSERT INTO services (id, name, category, description, default_price, status) VALUES (?, ?, ?, ?, ?, "active")',
+            [id, name.trim(), category || null, description || null, price]
+          );
+        });
+        return jsonResponse({ id, name: name.trim(), category, description, defaultPrice: price }, 201, corsHeaders);
+      } catch (err) {
+        return jsonResponse({ error: err.message }, 500, corsHeaders);
+      }
+    }
+
+    if (path.match(/^\/api\/settings\/services\/[^/]+$/) && method === 'DELETE') {
+      const user = getUser(request, env);
+      if (user && user.role === 'staff') {
+        return jsonResponse({ error: 'Staff users are not permitted to delete services.' }, 403, corsHeaders);
+      }
+      try {
+        const id = path.split('/')[4];
+        await withDb(env, async (conn) => {
+          await conn.query('UPDATE services SET status = "inactive" WHERE id = ?', [id]);
+        });
+        return jsonResponse({ success: true }, 200, corsHeaders);
+      } catch (err) {
+        return jsonResponse({ error: err.message }, 500, corsHeaders);
+      }
+    }
+
+    // ----------------------------------------------------
     // CUSTOMERS
     // ----------------------------------------------------
     if (path === '/api/customers' && method === 'GET') {
@@ -338,6 +485,35 @@ export default {
       }
     }
 
+    if (path.match(/^\/api\/customers\/[^/]+$/) && method === 'GET') {
+      try {
+        const id = path.split('/')[3];
+        const customer = await withDb(env, async (conn) => {
+          const [custs] = await conn.query('SELECT * FROM customers WHERE id = ?', [id]);
+          if (custs.length === 0) return null;
+          const c = custs[0];
+          const [vehs] = await conn.query('SELECT * FROM vehicles WHERE customer_id = ?', [id]);
+          const [invoices] = await conn.query('SELECT customer_id, date FROM invoices WHERE customer_id = ? ORDER BY date DESC', [id]);
+          return {
+            id: c.id,
+            name: c.name,
+            phone: c.phone,
+            email: c.email,
+            address: c.address,
+            notes: c.notes,
+            vehicles: vehs.map(v => ({ id: v.id, regNo: v.registration_number, make: v.make, model: v.model, year: v.model_year, color: v.color })),
+            totalVisits: invoices.length,
+            lastServiceDate: invoices.length > 0 ? invoices[0].date : '',
+            createdAt: c.created_at,
+          };
+        });
+        if (!customer) return jsonResponse({ error: 'Customer not found' }, 404, corsHeaders);
+        return jsonResponse(customer, 200, corsHeaders);
+      } catch (err) {
+        return jsonResponse({ error: err.message }, 500, corsHeaders);
+      }
+    }
+
     if (path === '/api/customers' && method === 'POST') {
       try {
         const body = await request.json();
@@ -372,6 +548,33 @@ export default {
           };
         });
         return jsonResponse(created, 201, corsHeaders);
+      } catch (err) {
+        return jsonResponse({ error: err.message }, 500, corsHeaders);
+      }
+    }
+
+    if (path.match(/^\/api\/customers\/[^/]+$/) && method === 'PUT') {
+      try {
+        const id = path.split('/')[3];
+        const body = await request.json();
+        const updated = await withTransaction(env, async (conn) => {
+          await conn.query(
+            'UPDATE customers SET name = ?, phone = ?, email = ?, address = ?, notes = ?, updated_at = NOW() WHERE id = ?',
+            [body.name.trim(), body.phone.trim(), body.email || null, body.address || null, body.notes || null, id]
+          );
+          if (body.vehicles && Array.isArray(body.vehicles)) {
+            await conn.query('DELETE FROM vehicles WHERE customer_id = ?', [id]);
+            for (const v of body.vehicles) {
+              const vId = v.id || `veh-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+              await conn.query(
+                'INSERT INTO vehicles (id, customer_id, registration_number, make, model, model_year, color, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())',
+                [vId, id, v.regNo.trim(), v.make || null, v.model.trim(), v.year || null, v.color || null]
+              );
+            }
+          }
+          return { id, ...body };
+        });
+        return jsonResponse(updated, 200, corsHeaders);
       } catch (err) {
         return jsonResponse({ error: err.message }, 500, corsHeaders);
       }
@@ -505,6 +708,116 @@ export default {
       }
     }
 
+    if (path === '/api/invoices' && method === 'POST') {
+      try {
+        const body = await request.json();
+        const created = await withTransaction(env, async (conn) => {
+          const invId = `inv-${Date.now()}`;
+          const [setRows] = await conn.query('SELECT setting_value FROM settings WHERE setting_key = "invoice_prefix"');
+          const prefix = setRows[0]?.setting_value || 'INV-';
+          const [countRows] = await conn.query('SELECT COUNT(*) as count FROM invoices');
+          const nextSeq = (countRows[0]?.count || 0) + 1;
+          const invoiceNumber = `${prefix}${String(nextSeq).padStart(4, '0')}`;
+
+          const grandTotal = Number(body.grandTotal) || 0;
+          const paid = Number(body.paid) || 0;
+          const due = Math.max(0, grandTotal - paid);
+          const status = due === 0 ? 'paid' : paid > 0 ? 'partial' : 'due';
+          const pMethod = (body.paymentMethod || 'cash').toLowerCase();
+
+          await conn.query(
+            `INSERT INTO invoices (id, invoice_number, quotation_id, job_card_id, customer_id, vehicle_id, customer_name, customer_phone, vehicle_registration, vehicle_model, vehicle_color, date, time, subtotal, discount, grand_total, paid, due, status, payment_method, notes, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+            [
+              invId,
+              invoiceNumber,
+              body.quotationId || null,
+              body.jobCardId || null,
+              body.customerId || null,
+              body.vehicleId || null,
+              body.customerName.trim(),
+              body.customerPhone.trim(),
+              body.vehicleRegistration.trim(),
+              body.vehicleModel.trim(),
+              body.vehicleColor || null,
+              body.date,
+              body.time || null,
+              body.subtotal || 0,
+              body.discount || 0,
+              grandTotal,
+              paid,
+              due,
+              status,
+              pMethod,
+              body.notes || null,
+            ]
+          );
+
+          if (body.items && Array.isArray(body.items)) {
+            for (let i = 0; i < body.items.length; i++) {
+              const itm = body.items[i];
+              await conn.query(
+                `INSERT INTO invoice_items (id, invoice_id, item_type, description, quantity, unit_price, total, sort_order)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                [`ii-${Date.now()}-${i}`, invId, itm.type || 'service', itm.description, itm.quantity || 1, itm.unitPrice || 0, itm.total || 0, i]
+              );
+            }
+          }
+
+          if (paid > 0) {
+            const pmtId = `pmt-${Date.now()}`;
+            await conn.query(
+              `INSERT INTO payments (id, invoice_id, amount, payment_method, payment_date, reference, note, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
+              [pmtId, invId, paid, pMethod, body.date, invoiceNumber, 'Initial Payment']
+            );
+            await conn.query(
+              `INSERT INTO financial_transactions (id, date, time, type, category, description, payment_method, amount, reference_type, reference_id, notes, created_at)
+               VALUES (?, ?, ?, 'INCOME', 'Service Payment', ?, ?, ?, 'invoice_payment', ?, ?, NOW())`,
+              [`tx-${Date.now()}`, body.date, body.time || null, `Payment for invoice ${invoiceNumber}`, pMethod, paid, invoiceNumber, 'Initial payment received']
+            );
+          }
+
+          return { id: invId, invoiceNumber, ...body, grandTotal, paid, due, status };
+        });
+        return jsonResponse(created, 201, corsHeaders);
+      } catch (err) {
+        return jsonResponse({ error: err.message }, 500, corsHeaders);
+      }
+    }
+
+    if (path.match(/^\/api\/invoices\/[^/]+\/payments$/) && method === 'POST') {
+      try {
+        const id = path.split('/')[3];
+        const body = await request.json();
+        const result = await withTransaction(env, async (conn) => {
+          const [invRows] = await conn.query('SELECT * FROM invoices WHERE id = ? FOR UPDATE', [id]);
+          if (invRows.length === 0) throw new Error('Invoice not found');
+          const inv = invRows[0];
+          const paymentAmount = Number(body.amount) || 0;
+          const newPaid = Number(inv.paid) + paymentAmount;
+          const newDue = Math.max(0, Number(inv.grand_total) - newPaid);
+          const newStatus = newDue === 0 ? 'paid' : 'partial';
+          const pMethod = (body.method || body.paymentMethod || 'cash').toLowerCase();
+
+          await conn.query('UPDATE invoices SET paid = ?, due = ?, status = ?, updated_at = NOW() WHERE id = ?', [newPaid, newDue, newStatus, id]);
+          const pmtId = `pmt-${Date.now()}`;
+          await conn.query(
+            'INSERT INTO payments (id, invoice_id, amount, payment_method, payment_date, reference, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())',
+            [pmtId, id, paymentAmount, pMethod, body.date || new Date().toISOString().split('T')[0], body.reference || inv.invoice_number, body.notes || 'Due payment collection']
+          );
+          await conn.query(
+            'INSERT INTO financial_transactions (id, date, time, type, category, description, payment_method, amount, reference_type, reference_id, notes, created_at) VALUES (?, ?, ?, "INCOME", "Service Payment", ?, ?, ?, "invoice_payment", ?, ?, NOW())',
+            [`tx-${Date.now()}`, body.date || new Date().toISOString().split('T')[0], null, `Due payment for ${inv.invoice_number}`, pMethod, paymentAmount, inv.invoice_number, body.notes || null]
+          );
+          return { success: true, newPaid, newDue, newStatus };
+        });
+        return jsonResponse(result, 200, corsHeaders);
+      } catch (err) {
+        return jsonResponse({ error: err.message }, 500, corsHeaders);
+      }
+    }
+
     if (path.match(/^\/api\/invoices\/[^/]+$/) && method === 'DELETE') {
       const user = getUser(request, env);
       if (user && user.role === 'staff') {
@@ -558,6 +871,40 @@ export default {
           return rows.map(r => r.name);
         });
         return jsonResponse(cats, 200, corsHeaders);
+      } catch (err) {
+        return jsonResponse({ error: err.message }, 500, corsHeaders);
+      }
+    }
+
+    if (path === '/api/expenses/categories' && method === 'POST') {
+      try {
+        const { name } = await request.json();
+        if (!name) return jsonResponse({ error: 'Category name is required' }, 400, corsHeaders);
+        const categories = await withDb(env, async (conn) => {
+          const id = `exp_cat_${Date.now()}`;
+          await conn.query('INSERT IGNORE INTO expense_categories (id, name, status) VALUES (?, ?, "active")', [id, name.trim()]);
+          const [rows] = await conn.query('SELECT name FROM expense_categories WHERE status = "active" ORDER BY name ASC');
+          return rows.map(r => r.name);
+        });
+        return jsonResponse(categories, 200, corsHeaders);
+      } catch (err) {
+        return jsonResponse({ error: err.message }, 500, corsHeaders);
+      }
+    }
+
+    if (path.startsWith('/api/expenses/categories/') && method === 'DELETE') {
+      const user = getUser(request, env);
+      if (user && user.role === 'staff') {
+        return jsonResponse({ error: 'Staff users are not permitted to delete expense categories.' }, 403, corsHeaders);
+      }
+      try {
+        const name = decodeURIComponent(path.replace('/api/expenses/categories/', ''));
+        const categories = await withDb(env, async (conn) => {
+          await conn.query('DELETE FROM expense_categories WHERE name = ?', [name]);
+          const [rows] = await conn.query('SELECT name FROM expense_categories WHERE status = "active" ORDER BY name ASC');
+          return rows.map(r => r.name);
+        });
+        return jsonResponse(categories, 200, corsHeaders);
       } catch (err) {
         return jsonResponse({ error: err.message }, 500, corsHeaders);
       }
@@ -651,41 +998,35 @@ export default {
       }
     }
 
-    // ----------------------------------------------------
-    // SETTINGS & SERVICES
-    // ----------------------------------------------------
-    if (path === '/api/settings' && method === 'GET') {
+    if (path === '/api/transactions/cash-in' && method === 'POST') {
       try {
-        const settings = await withDb(env, async (conn) => {
-          const [rows] = await conn.query('SELECT setting_key, setting_value FROM settings');
-          const map = {};
-          rows.forEach(r => { map[r.setting_key] = r.setting_value; });
-          return {
-            businessName: map.business_name || 'Arshi Automobile & Car Hub',
-            phone: map.phone || '01712110902',
-            altPhone: map.alt_phone || '01712345678',
-            address: map.address || 'Bhadra Mor, Station Road, Rajshahi, Bangladesh',
-            email: map.email || 'arshi.autohub@gmail.com',
-            invoicePrefix: map.invoice_prefix || 'INV-',
-            quotationPrefix: map.quotation_prefix || 'QT-',
-            jobCardPrefix: map.job_card_prefix || 'JC-',
-            defaultFooterText: map.default_footer_text || 'Thank you for choosing Arshi Automobile & Car Hub. Quality service guaranteed.',
-            currencySymbol: map.currency_symbol || '৳',
-          };
+        const body = await request.json();
+        const created = await withTransaction(env, async (conn) => {
+          const txId = `tx-${Date.now()}`;
+          const pMethod = (body.paymentMethod || 'cash').toLowerCase();
+          await conn.query(
+            'INSERT INTO financial_transactions (id, date, time, type, category, description, payment_method, amount, reference_type, reference_id, notes, created_at) VALUES (?, ?, ?, "INCOME", ?, ?, ?, ?, "cash_in", ?, ?, NOW())',
+            [txId, body.date, body.time || null, body.type || 'Other Income', body.description || `${body.type} Inflow`, pMethod, body.amount, body.reference || null, body.note || null]
+          );
+          return { id: txId, ...body };
         });
-        return jsonResponse(settings, 200, corsHeaders);
+        return jsonResponse(created, 201, corsHeaders);
       } catch (err) {
         return jsonResponse({ error: err.message }, 500, corsHeaders);
       }
     }
 
-    if (path === '/api/settings/services' && method === 'GET') {
+    if (path.match(/^\/api\/transactions\/cash-in\/[^/]+$/) && method === 'DELETE') {
+      const user = getUser(request, env);
+      if (user && user.role === 'staff') {
+        return jsonResponse({ error: 'Staff users are not permitted to delete cash-in transactions.' }, 403, corsHeaders);
+      }
       try {
-        const services = await withDb(env, async (conn) => {
-          const [rows] = await conn.query('SELECT id, name, category, description, default_price as defaultPrice FROM services WHERE status = "active" ORDER BY name ASC');
-          return rows.map(r => ({ ...r, defaultPrice: Number(r.defaultPrice) || 0 }));
+        const id = path.split('/')[4];
+        await withDb(env, async (conn) => {
+          await conn.query('DELETE FROM financial_transactions WHERE id = ?', [id]);
         });
-        return jsonResponse(services, 200, corsHeaders);
+        return jsonResponse({ success: true }, 200, corsHeaders);
       } catch (err) {
         return jsonResponse({ error: err.message }, 500, corsHeaders);
       }
@@ -800,6 +1141,55 @@ export default {
       }
     }
 
+    if (path.match(/^\/api\/job-cards\/[^/]+$/) && method === 'GET') {
+      try {
+        const id = path.split('/')[3];
+        const card = await withDb(env, async (conn) => {
+          const [jcRows] = await conn.query('SELECT * FROM job_cards WHERE id = ?', [id]);
+          if (jcRows.length === 0) return null;
+          const jc = jcRows[0];
+          const [tasks] = await conn.query('SELECT * FROM job_card_tasks WHERE job_card_id = ? ORDER BY sort_order ASC', [id]);
+          return {
+            id: jc.id,
+            jobCardNumber: jc.job_card_number,
+            customerId: jc.customer_id,
+            customerName: jc.customer_name,
+            customerPhone: jc.customer_phone,
+            vehicleRegistration: jc.vehicle_registration,
+            vehicleModel: jc.vehicle_model,
+            vehicleColor: jc.vehicle_color,
+            mileage: jc.mileage,
+            date: jc.date,
+            time: jc.time,
+            assignedTechnician: jc.assigned_technician,
+            notes: jc.notes,
+            status: jc.status === 'in_progress' ? 'In Progress' : jc.status.charAt(0).toUpperCase() + jc.status.slice(1),
+            tasks: tasks.map(t => ({ id: t.id, description: t.description, isCompleted: !!t.is_completed })),
+          };
+        });
+        if (!card) return jsonResponse({ error: 'Job card not found' }, 404, corsHeaders);
+        return jsonResponse(card, 200, corsHeaders);
+      } catch (err) {
+        return jsonResponse({ error: err.message }, 500, corsHeaders);
+      }
+    }
+
+    if (path.match(/^\/api\/job-cards\/[^/]+$/) && method === 'DELETE') {
+      const user = getUser(request, env);
+      if (user && user.role === 'staff') {
+        return jsonResponse({ error: 'Staff users are not permitted to delete job cards.' }, 403, corsHeaders);
+      }
+      try {
+        const id = path.split('/')[3];
+        await withDb(env, async (conn) => {
+          await conn.query('DELETE FROM job_cards WHERE id = ?', [id]);
+        });
+        return jsonResponse({ success: true }, 200, corsHeaders);
+      } catch (err) {
+        return jsonResponse({ error: err.message }, 500, corsHeaders);
+      }
+    }
+
     // ----------------------------------------------------
     // QUOTATIONS
     // ----------------------------------------------------
@@ -837,6 +1227,62 @@ export default {
           }));
         });
         return jsonResponse(quotations, 200, corsHeaders);
+      } catch (err) {
+        return jsonResponse({ error: err.message }, 500, corsHeaders);
+      }
+    }
+
+    if (path.match(/^\/api\/quotations\/[^/]+$/) && method === 'GET') {
+      try {
+        const id = path.split('/')[3];
+        const quotation = await withDb(env, async (conn) => {
+          const [qtRows] = await conn.query('SELECT * FROM quotations WHERE id = ?', [id]);
+          if (qtRows.length === 0) return null;
+          const qt = qtRows[0];
+          const [items] = await conn.query('SELECT * FROM quotation_items WHERE quotation_id = ? ORDER BY sort_order ASC', [id]);
+          return {
+            id: qt.id,
+            quotationNumber: qt.quotation_number,
+            customerId: qt.customer_id,
+            customerName: qt.customer_name,
+            customerPhone: qt.customer_phone,
+            vehicleRegistration: qt.vehicle_registration,
+            vehicleModel: qt.vehicle_model,
+            vehicleColor: qt.vehicle_color,
+            date: qt.quotation_date,
+            validUntil: qt.valid_until,
+            subtotal: Number(qt.subtotal),
+            discount: Number(qt.discount),
+            total: Number(qt.total),
+            notes: qt.notes,
+            status: qt.status.charAt(0).toUpperCase() + qt.status.slice(1),
+            items: items.map(i => ({
+              id: i.id,
+              description: i.description,
+              quantity: Number(i.quantity),
+              unitPrice: Number(i.unit_price),
+              total: Number(i.total),
+            })),
+          };
+        });
+        if (!quotation) return jsonResponse({ error: 'Quotation not found' }, 404, corsHeaders);
+        return jsonResponse(quotation, 200, corsHeaders);
+      } catch (err) {
+        return jsonResponse({ error: err.message }, 500, corsHeaders);
+      }
+    }
+
+    if (path.match(/^\/api\/quotations\/[^/]+$/) && method === 'DELETE') {
+      const user = getUser(request, env);
+      if (user && user.role === 'staff') {
+        return jsonResponse({ error: 'Staff users are not permitted to delete quotations.' }, 403, corsHeaders);
+      }
+      try {
+        const id = path.split('/')[3];
+        await withDb(env, async (conn) => {
+          await conn.query('DELETE FROM quotations WHERE id = ?', [id]);
+        });
+        return jsonResponse({ success: true }, 200, corsHeaders);
       } catch (err) {
         return jsonResponse({ error: err.message }, 500, corsHeaders);
       }
