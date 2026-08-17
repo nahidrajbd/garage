@@ -9,20 +9,28 @@ import {
   FileText, 
   Wrench, 
   Tag,
-  CheckCircle2
+  Users,
+  ShieldCheck,
+  UserCheck,
+  Key,
+  Lock,
+  UserPlus
 } from 'lucide-react';
 import { ConfirmDialog } from '../components/common/ConfirmDialog';
 import { useApp } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
-import { Settings, ServiceItem } from '../types';
+import { Settings, ServiceItem, User, UserRole } from '../types';
 import { formatBDT } from '../utils/formatters';
 
 export const SettingsPage: React.FC = () => {
   const { showToast, triggerRefresh } = useApp();
+  const { user: currentUser, isSuperAdmin, canDelete, canManageUsers } = useAuth();
 
   const [settings, setSettings] = useState<Settings | null>(null);
   const [services, setServices] = useState<ServiceItem[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
+  const [usersList, setUsersList] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
 
   // New Service state
@@ -33,6 +41,17 @@ export const SettingsPage: React.FC = () => {
   // New Category state
   const [newCategoryName, setNewCategoryName] = useState('');
 
+  // New User state (Super Admin only)
+  const [newUserName, setNewUserName] = useState('');
+  const [newUserUsername, setNewUserUsername] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('');
+  const [newUserRole, setNewUserRole] = useState<UserRole>('staff');
+  const [isCreatingUser, setIsCreatingUser] = useState(false);
+
+  // Password reset modal state
+  const [selectedUserForReset, setSelectedUserForReset] = useState<User | null>(null);
+  const [resetPasswordInput, setResetPasswordInput] = useState('');
+
   // Reset Confirmation
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -41,14 +60,24 @@ export const SettingsPage: React.FC = () => {
     const loadSettings = async () => {
       setLoading(true);
       try {
-        const [sett, srvs, cats] = await Promise.all([
+        const promises: [Promise<Settings>, Promise<ServiceItem[]>, Promise<string[]>] = [
           api.getSettings(),
           api.getServices(),
           api.getExpenseCategories()
-        ]);
+        ];
+        const [sett, srvs, cats] = await Promise.all(promises);
         setSettings(sett);
         setServices(srvs);
         setCategories(cats);
+
+        if (canManageUsers) {
+          try {
+            const uList = await api.getUsers();
+            setUsersList(uList);
+          } catch (e) {
+            console.error('Failed to load users:', e);
+          }
+        }
       } catch (err) {
         console.error(err);
       } finally {
@@ -56,7 +85,7 @@ export const SettingsPage: React.FC = () => {
       }
     };
     loadSettings();
-  }, []);
+  }, [canManageUsers]);
 
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -96,14 +125,18 @@ export const SettingsPage: React.FC = () => {
   };
 
   const handleDeleteService = async (id: string) => {
+    if (!canDelete) {
+      showToast('Staff users are not permitted to delete services.', 'error');
+      return;
+    }
     try {
       await api.deleteService(id);
       setServices(prev => prev.filter(s => s.id !== id));
       showToast('Service removed', 'info');
       triggerRefresh();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      showToast('Failed to delete service', 'error');
+      showToast(err.message || 'Failed to delete service', 'error');
     }
   };
 
@@ -123,14 +156,77 @@ export const SettingsPage: React.FC = () => {
   };
 
   const handleDeleteCategory = async (cat: string) => {
+    if (!canDelete) {
+      showToast('Staff users are not permitted to delete categories.', 'error');
+      return;
+    }
     try {
       const updated = await api.deleteExpenseCategory(cat);
       setCategories(updated);
       showToast(`Category "${cat}" removed`, 'info');
       triggerRefresh();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      showToast('Failed to delete category', 'error');
+      showToast(err.message || 'Failed to delete category', 'error');
+    }
+  };
+
+  // User Management Handlers (Super Admin Only)
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newUserName.trim() || !newUserUsername.trim() || !newUserPassword) {
+      showToast('Please fill all user fields', 'error');
+      return;
+    }
+
+    setIsCreatingUser(true);
+    try {
+      const created = await api.createUser({
+        name: newUserName.trim(),
+        username: newUserUsername.trim(),
+        password: newUserPassword,
+        role: newUserRole
+      });
+      setUsersList(prev => [...prev, created]);
+      setNewUserName('');
+      setNewUserUsername('');
+      setNewUserPassword('');
+      setNewUserRole('staff');
+      showToast(`User "${created.name}" created successfully (${created.role})!`, 'success');
+    } catch (err: any) {
+      console.error(err);
+      showToast(err.message || 'Failed to create user', 'error');
+    } finally {
+      setIsCreatingUser(false);
+    }
+  };
+
+  const handleDeleteUser = async (userToDelete: User) => {
+    if (userToDelete.id === currentUser?.id) {
+      showToast('You cannot delete your own account while signed in.', 'error');
+      return;
+    }
+    try {
+      await api.deleteUser(userToDelete.id);
+      setUsersList(prev => prev.filter(u => u.id !== userToDelete.id));
+      showToast(`User ${userToDelete.name} removed`, 'info');
+    } catch (err: any) {
+      console.error(err);
+      showToast(err.message || 'Failed to delete user', 'error');
+    }
+  };
+
+  const handleResetUserPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedUserForReset || !resetPasswordInput) return;
+    try {
+      await api.resetUserPassword(selectedUserForReset.id, resetPasswordInput);
+      showToast(`Password for ${selectedUserForReset.name} reset successfully`, 'success');
+      setSelectedUserForReset(null);
+      setResetPasswordInput('');
+    } catch (err: any) {
+      console.error(err);
+      showToast(err.message || 'Failed to reset password', 'error');
     }
   };
 
@@ -138,7 +234,6 @@ export const SettingsPage: React.FC = () => {
     try {
       await api.resetToDefault();
       showToast('All data has been reset to default demo dataset', 'success');
-      // Reload page state
       const [sett, srvs, cats] = await Promise.all([
         api.getSettings(),
         api.getServices(),
@@ -167,21 +262,197 @@ export const SettingsPage: React.FC = () => {
             System & Business Settings
           </h2>
           <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
-            Manage garage profile, invoice formatting, service pricing, and expense categories
+            Manage garage profile, invoice formatting, user access control, and services catalog.
           </p>
         </div>
 
-        <button
-          type="button"
-          onClick={() => setIsResetConfirmOpen(true)}
-          className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl transition-colors"
-        >
-          <RotateCcw className="w-3.5 h-3.5" />
-          <span>Reset Demo Data</span>
-        </button>
+        {isSuperAdmin && (
+          <button
+            type="button"
+            onClick={() => setIsResetConfirmOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl transition-colors cursor-pointer"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>Reset Demo Data</span>
+          </button>
+        )}
       </div>
 
-      {/* 1. Business Information & Invoice Settings Form */}
+      {/* 1. User & Access Control Management (Super Admin Exclusive) */}
+      {canManageUsers && (
+        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-gray-200/80 shadow-2xs space-y-6">
+          <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-red-50 text-red-600 flex items-center justify-center">
+                <Users className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider font-heading">
+                  User Accounts & Access Control
+                </h3>
+                <p className="text-xs text-gray-500">
+                  Super Admin can add/remove users and manage permissions. Staff accounts cannot delete records.
+                </p>
+              </div>
+            </div>
+            <span className="text-xs font-mono font-semibold text-gray-500 bg-gray-100 px-2.5 py-1 rounded-lg">
+              {usersList.length} Accounts
+            </span>
+          </div>
+
+          {/* Add New User Form */}
+          <form onSubmit={handleCreateUser} className="p-4 bg-gray-50/80 rounded-2xl border border-gray-200 space-y-3">
+            <div className="flex items-center gap-2 text-xs font-bold text-gray-800 uppercase tracking-wider font-heading mb-1">
+              <UserPlus className="w-4 h-4 text-[#C1121F]" />
+              <span>Create New User Account</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-700 mb-1">Full Name</label>
+                <input
+                  type="text"
+                  required
+                  value={newUserName}
+                  onChange={e => setNewUserName(e.target.value)}
+                  placeholder="e.g. John Doe"
+                  className="w-full text-xs px-3 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-red-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-700 mb-1">Username</label>
+                <input
+                  type="text"
+                  required
+                  value={newUserUsername}
+                  onChange={e => setNewUserUsername(e.target.value)}
+                  placeholder="e.g. jdoe"
+                  className="w-full text-xs px-3 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-red-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-700 mb-1">Password</label>
+                <input
+                  type="password"
+                  required
+                  value={newUserPassword}
+                  onChange={e => setNewUserPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full text-xs px-3 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-red-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-gray-700 mb-1">Role Permission</label>
+                <select
+                  value={newUserRole}
+                  onChange={e => setNewUserRole(e.target.value as UserRole)}
+                  className="w-full text-xs px-3 py-2 border border-gray-300 rounded-lg bg-white font-semibold focus:ring-2 focus:ring-red-500 focus:outline-none"
+                >
+                  <option value="staff">Staff (Create/Edit Only)</option>
+                  <option value="super_admin">Super Admin (Full Access & Delete)</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-1">
+              <button
+                type="submit"
+                disabled={isCreatingUser}
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-[#C1121F] hover:bg-[#A30F1A] rounded-xl transition-all shadow-xs cursor-pointer font-heading uppercase tracking-wider disabled:opacity-50"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>{isCreatingUser ? 'Creating...' : 'Add User'}</span>
+              </button>
+            </div>
+          </form>
+
+          {/* Users Table */}
+          <div className="overflow-x-auto border border-gray-200 rounded-xl">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-gray-50 border-b border-gray-200 text-gray-600 font-semibold uppercase tracking-wider">
+                <tr>
+                  <th className="py-3 px-4">User</th>
+                  <th className="py-3 px-4">Username</th>
+                  <th className="py-3 px-4">Role</th>
+                  <th className="py-3 px-4">Status</th>
+                  <th className="py-3 px-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {usersList.map((u) => {
+                  const isCurrent = u.id === currentUser?.id;
+                  const isSuper = u.role === 'super_admin';
+                  return (
+                    <tr key={u.id} className="hover:bg-gray-50/80 transition-colors">
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-[11px] ${
+                            isSuper ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
+                          }`}>
+                            {u.name.charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <span className="font-semibold text-gray-900">{u.name}</span>
+                            {isCurrent && (
+                              <span className="ml-2 text-[10px] bg-emerald-50 text-emerald-700 font-semibold px-1.5 py-0.5 rounded border border-emerald-200">
+                                You
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 font-mono text-gray-700">{u.username}</td>
+                      <td className="py-3 px-4">
+                        <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border ${
+                          isSuper 
+                            ? 'bg-red-50 text-red-700 border-red-200' 
+                            : 'bg-blue-50 text-blue-700 border-blue-200'
+                        }`}>
+                          {isSuper ? <ShieldCheck className="w-3 h-3" /> : <UserCheck className="w-3 h-3" />}
+                          <span>{isSuper ? 'Super Admin' : 'Staff'}</span>
+                        </span>
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className={`inline-block w-2 h-2 rounded-full mr-1.5 ${
+                          u.status === 'active' ? 'bg-emerald-500' : 'bg-gray-400'
+                        }`} />
+                        <span className="capitalize text-gray-700">{u.status}</span>
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedUserForReset(u)}
+                            className="p-1.5 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+                            title="Reset Password"
+                          >
+                            <Key className="w-3.5 h-3.5" />
+                          </button>
+                          {!isCurrent && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteUser(u)}
+                              className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                              title="Delete User"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* 2. Business Information & Invoice Settings Form */}
       <form onSubmit={handleSaveSettings} className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Business Info */}
@@ -299,7 +570,7 @@ export const SettingsPage: React.FC = () => {
           <button
             type="submit"
             disabled={isSaving}
-            className="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-bold text-white bg-[#C1121F] hover:bg-[#9E0E19] active:bg-[#800C15] rounded-xl transition-all shadow-xs"
+            className="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-bold text-white bg-[#C1121F] hover:bg-[#9E0E19] active:bg-[#800C15] rounded-xl transition-all shadow-xs cursor-pointer"
           >
             <Save className="w-4 h-4" />
             <span>{isSaving ? 'Saving...' : 'Save General Settings'}</span>
@@ -307,7 +578,7 @@ export const SettingsPage: React.FC = () => {
         </div>
       </form>
 
-      {/* 2. Service Catalog Management */}
+      {/* 3. Service Catalog Management */}
       <div className="bg-white p-5 rounded-2xl border border-gray-200/80 shadow-2xs space-y-4">
         <div className="flex items-center justify-between pb-3 border-b border-gray-100">
           <div className="flex items-center gap-2">
@@ -348,7 +619,7 @@ export const SettingsPage: React.FC = () => {
 
           <button
             type="submit"
-            className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-gray-900 hover:bg-black rounded-lg transition-colors shadow-xs"
+            className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-gray-900 hover:bg-black rounded-lg transition-colors shadow-xs cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>Add Service</span>
@@ -370,21 +641,23 @@ export const SettingsPage: React.FC = () => {
 
               <div className="flex items-center gap-3">
                 <span className="font-bold text-xs sm:text-sm font-mono text-gray-900">{formatBDT(s.defaultPrice)}</span>
-                <button
-                  type="button"
-                  onClick={() => handleDeleteService(s.id)}
-                  className="p-1 text-gray-400 hover:text-rose-600 rounded"
-                  title="Remove Service"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                {canDelete && (
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteService(s.id)}
+                    className="p-1 text-gray-400 hover:text-rose-600 rounded cursor-pointer"
+                    title="Remove Service"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
               </div>
             </div>
           ))}
         </div>
       </div>
 
-      {/* 3. Expense Categories Management */}
+      {/* 4. Expense Categories Management */}
       <div className="bg-white p-5 rounded-2xl border border-gray-200/80 shadow-2xs space-y-4">
         <div className="flex items-center justify-between pb-3 border-b border-gray-100">
           <div className="flex items-center gap-2">
@@ -408,7 +681,7 @@ export const SettingsPage: React.FC = () => {
           />
           <button
             type="submit"
-            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-gray-900 hover:bg-black rounded-lg transition-colors shadow-xs shrink-0"
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-gray-900 hover:bg-black rounded-lg transition-colors shadow-xs shrink-0 cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>Add Category</span>
@@ -423,11 +696,11 @@ export const SettingsPage: React.FC = () => {
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 text-gray-800 rounded-xl text-xs font-semibold border border-gray-200"
             >
               <span>{cat}</span>
-              {!['Salary', 'Purchase', 'Loan Repayment'].includes(cat) && (
+              {canDelete && !['Salary', 'Purchase', 'Loan Repayment'].includes(cat) && (
                 <button
                   type="button"
                   onClick={() => handleDeleteCategory(cat)}
-                  className="text-gray-400 hover:text-rose-600 rounded-full"
+                  className="text-gray-400 hover:text-rose-600 rounded-full cursor-pointer"
                 >
                   <Trash2 className="w-3 h-3" />
                 </button>
@@ -436,6 +709,46 @@ export const SettingsPage: React.FC = () => {
           ))}
         </div>
       </div>
+
+      {/* Password Reset Dialog */}
+      {selectedUserForReset && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl border border-gray-100">
+            <div className="flex items-center gap-2 mb-4 text-gray-900 font-bold font-heading">
+              <Lock className="w-5 h-5 text-[#C1121F]" />
+              <span>Reset Password for {selectedUserForReset.name}</span>
+            </div>
+            <form onSubmit={handleResetUserPassword} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">New Password</label>
+                <input
+                  type="password"
+                  required
+                  value={resetPasswordInput}
+                  onChange={e => setResetPasswordInput(e.target.value)}
+                  placeholder="Enter new password"
+                  className="w-full text-xs px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:outline-none"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedUserForReset(null)}
+                  className="px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-100 rounded-lg cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1.5 text-xs font-semibold text-white bg-[#C1121F] hover:bg-[#A30F1A] rounded-lg cursor-pointer"
+                >
+                  Update Password
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Reset Confirmation Dialog */}
       <ConfirmDialog

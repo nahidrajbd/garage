@@ -1,3 +1,20 @@
+export type UserRole = 'super_admin' | 'staff';
+
+export interface User {
+  id: string;
+  name: string;
+  username: string;
+  role: UserRole;
+  status: 'active' | 'inactive';
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface AuthSession {
+  token: string;
+  user: User;
+}
+
 export type PaymentMethod = 'Cash' | 'bKash' | 'Bank';
 
 export type InvoiceStatus = 'Paid' | 'Partial' | 'Due';

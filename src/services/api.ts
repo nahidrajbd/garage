@@ -1,5 +1,7 @@
-import { storage } from './storage';
 import {
+  User,
+  UserRole,
+  AuthSession,
   Customer,
   Invoice,
   Quotation,
@@ -21,56 +23,158 @@ import {
 } from '../types';
 import { initialStaff } from '../mock/initialData';
 
-// Artificial delay to simulate network call if needed
-const delay = (ms = 50) => new Promise(res => setTimeout(res, ms));
+const BASE_URL = '/api';
+const TOKEN_KEY = 'nextgarage_auth_token';
+
+export function getAuthToken(): string | null {
+  try {
+    return localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setAuthToken(token: string | null): void {
+  try {
+    if (token) {
+      localStorage.setItem(TOKEN_KEY, token);
+    } else {
+      localStorage.removeItem(TOKEN_KEY);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  const url = `${BASE_URL}${endpoint}`;
+  const token = getAuthToken();
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(options.headers as Record<string, string> || {}),
+  };
+
+  const response = await fetch(url, {
+    ...options,
+    headers,
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.json().catch(() => ({}));
+    throw new Error(errorBody.error || `HTTP error! status: ${response.status}`);
+  }
+
+  return response.json();
+}
 
 export const api = {
+  // Authentication & User Management
+  async login(username: string, password: string): Promise<AuthSession> {
+    const res = await request<AuthSession>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    });
+    setAuthToken(res.token);
+    return res;
+  },
+
+  async getCurrentUser(): Promise<User> {
+    return request<User>('/auth/me');
+  },
+
+  async changePassword(currentPassword: string, newPassword: string): Promise<{ success: boolean; message: string }> {
+    return request<{ success: boolean; message: string }>('/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
+  },
+
+  async getUsers(): Promise<User[]> {
+    return request<User[]>('/users');
+  },
+
+  async createUser(data: { name: string; username: string; password: string; role: UserRole }): Promise<User> {
+    return request<User>('/users', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async updateUser(id: string, data: Partial<User>): Promise<User> {
+    return request<User>(`/users/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async resetUserPassword(id: string, password: string): Promise<{ success: boolean; message: string }> {
+    return request<{ success: boolean; message: string }>(`/users/${id}/reset-password`, {
+      method: 'PUT',
+      body: JSON.stringify({ password }),
+    });
+  },
+
+  async deleteUser(id: string): Promise<boolean> {
+    await request(`/users/${id}`, { method: 'DELETE' });
+    return true;
+  },
+
   // Metrics & Reports
   async getDashboardMetrics(): Promise<DashboardMetrics> {
-    await delay();
-    return storage.getDashboardMetrics();
+    return request<DashboardMetrics>('/metrics');
   },
 
   async getTransactions(): Promise<Transaction[]> {
-    await delay();
-    return storage.getTransactions();
+    return request<Transaction[]>('/transactions');
   },
 
   // Customers
   async getCustomers(): Promise<Customer[]> {
-    await delay();
-    return storage.getCustomers();
+    return request<Customer[]>('/customers');
   },
 
   async getCustomerById(id: string): Promise<Customer | undefined> {
-    await delay();
-    return storage.getCustomers().find(c => c.id === id);
+    try {
+      return await request<Customer>(`/customers/${id}`);
+    } catch {
+      return undefined;
+    }
   },
 
   async createCustomer(data: Omit<Customer, 'id' | 'createdAt' | 'totalVisits' | 'lastServiceDate'>): Promise<Customer> {
-    await delay();
-    return storage.addCustomer(data);
+    return request<Customer>('/customers', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
   },
 
   async updateCustomer(id: string, data: Partial<Customer>): Promise<Customer | null> {
-    await delay();
-    return storage.updateCustomer(id, data);
+    return request<Customer>(`/customers/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
   },
 
   // Invoices
   async getInvoices(): Promise<Invoice[]> {
-    await delay();
-    return storage.getInvoices();
+    return request<Invoice[]>('/invoices');
   },
 
   async getInvoiceById(id: string): Promise<Invoice | undefined> {
-    await delay();
-    return storage.getInvoiceById(id);
+    try {
+      return await request<Invoice>(`/invoices/${id}`);
+    } catch {
+      return undefined;
+    }
   },
 
   async createInvoice(invoiceData: Omit<Invoice, 'id' | 'createdAt'>): Promise<Invoice> {
-    await delay();
-    return storage.createInvoice(invoiceData);
+    return request<Invoice>('/invoices', {
+      method: 'POST',
+      body: JSON.stringify(invoiceData),
+    });
   },
 
   async recordDuePayment(
@@ -79,208 +183,231 @@ export const api = {
     paymentMethod: 'Cash' | 'bKash' | 'Bank', 
     note?: string
   ): Promise<Invoice | null> {
-    await delay();
-    return storage.recordDuePayment(invoiceId, amount, paymentMethod, note);
+    return request<Invoice>(`/invoices/${invoiceId}/payments`, {
+      method: 'POST',
+      body: JSON.stringify({ amount, paymentMethod, note }),
+    });
   },
 
   async deleteInvoice(id: string): Promise<boolean> {
-    await delay();
-    storage.deleteInvoice(id);
+    await request(`/invoices/${id}`, { method: 'DELETE' });
     return true;
   },
 
   // Quotations
   async getQuotations(): Promise<Quotation[]> {
-    await delay();
-    return storage.getQuotations();
+    return request<Quotation[]>('/quotations');
   },
 
   async getQuotationById(id: string): Promise<Quotation | undefined> {
-    await delay();
-    return storage.getQuotationById(id);
+    try {
+      return await request<Quotation>(`/quotations/${id}`);
+    } catch {
+      return undefined;
+    }
   },
 
   async createQuotation(data: Omit<Quotation, 'id' | 'createdAt'>): Promise<Quotation> {
-    await delay();
-    return storage.createQuotation(data);
+    return request<Quotation>('/quotations', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
   },
 
   async updateQuotation(id: string, data: Partial<Quotation>): Promise<Quotation | null> {
-    await delay();
-    return storage.updateQuotation(id, data);
+    return request<Quotation>(`/quotations/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
   },
 
   async updateQuotationStatus(id: string, status: QuotationStatus): Promise<Quotation | null> {
-    await delay();
-    return storage.updateQuotationStatus(id, status);
+    return request<Quotation>(`/quotations/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    });
   },
 
   async deleteQuotation(id: string): Promise<boolean> {
-    await delay();
-    storage.deleteQuotation(id);
+    await request(`/quotations/${id}`, { method: 'DELETE' });
     return true;
   },
 
   async convertQuotationToInvoice(quotationId: string): Promise<Invoice | null> {
-    await delay();
-    return storage.convertQuotationToInvoice(quotationId);
+    return request<Invoice>(`/quotations/${quotationId}/convert`, {
+      method: 'POST',
+    });
   },
 
   // Job Cards
   async getJobCards(): Promise<JobCard[]> {
-    await delay();
-    return storage.getJobCards();
+    return request<JobCard[]>('/job-cards');
   },
 
   async getJobCardById(id: string): Promise<JobCard | undefined> {
-    await delay();
-    return storage.getJobCardById(id);
+    try {
+      return await request<JobCard>(`/job-cards/${id}`);
+    } catch {
+      return undefined;
+    }
   },
 
   async createJobCard(data: Omit<JobCard, 'id' | 'createdAt'>): Promise<JobCard> {
-    await delay();
-    return storage.createJobCard(data);
+    return request<JobCard>('/job-cards', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
   },
 
   async updateJobCard(id: string, data: Partial<JobCard>): Promise<JobCard | null> {
-    await delay();
-    return storage.updateJobCard(id, data);
+    return request<JobCard>(`/job-cards/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
   },
 
   async updateJobCardStatus(id: string, status: JobCardStatus): Promise<JobCard | null> {
-    await delay();
-    return storage.updateJobCardStatus(id, status);
+    return request<JobCard>(`/job-cards/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    });
   },
 
   async deleteJobCard(id: string): Promise<boolean> {
-    await delay();
-    storage.deleteJobCard(id);
+    await request(`/job-cards/${id}`, { method: 'DELETE' });
     return true;
   },
 
   async linkJobCardQuotation(jobCardId: string, quotationId: string, quotationNumber: string): Promise<void> {
-    await delay();
-    storage.linkJobCardQuotation(jobCardId, quotationId, quotationNumber);
+    await request(`/job-cards/${jobCardId}/link-quotation`, {
+      method: 'POST',
+      body: JSON.stringify({ quotationId, quotationNumber }),
+    });
   },
 
   async linkJobCardInvoice(jobCardId: string, invoiceId: string, invoiceNumber: string): Promise<void> {
-    await delay();
-    storage.linkJobCardInvoice(jobCardId, invoiceId, invoiceNumber);
+    await request(`/job-cards/${jobCardId}/link-invoice`, {
+      method: 'POST',
+      body: JSON.stringify({ invoiceId, invoiceNumber }),
+    });
   },
 
   async getStaffList(): Promise<string[]> {
-    await delay();
     return initialStaff;
   },
 
   // Cash In
   async getCashIn(): Promise<CashIn[]> {
-    await delay();
-    return storage.getCashIn();
+    return request<CashIn[]>('/transactions/cash-in');
   },
 
   async createCashIn(data: Omit<CashIn, 'id' | 'createdAt'>): Promise<CashIn> {
-    await delay();
-    return storage.addCashIn(data);
+    return request<CashIn>('/transactions/cash-in', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
   },
 
   async deleteCashIn(id: string): Promise<boolean> {
-    await delay();
-    storage.deleteCashIn(id);
+    await request(`/transactions/cash-in/${id}`, { method: 'DELETE' });
     return true;
   },
 
   // Expenses
   async getExpenses(): Promise<Expense[]> {
-    await delay();
-    return storage.getExpenses();
+    return request<Expense[]>('/expenses');
   },
 
   async createExpense(data: Omit<Expense, 'id' | 'createdAt'>): Promise<Expense> {
-    await delay();
-    return storage.addExpense(data);
+    return request<Expense>('/expenses', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
   },
 
   async deleteExpense(id: string): Promise<boolean> {
-    await delay();
-    storage.deleteExpense(id);
+    await request(`/expenses/${id}`, { method: 'DELETE' });
     return true;
   },
 
   // Loans
   async getLoanSummary(): Promise<LoanSummary> {
-    await delay();
-    return storage.getLoanSummary();
+    return request<LoanSummary>('/loans/summary');
   },
 
   async getLoanRecords(): Promise<LoanRecord[]> {
-    await delay();
-    return storage.getLoanRecords();
+    return request<LoanRecord[]>('/loans/records');
   },
 
   // Services Catalog
   async getServices(): Promise<ServiceItem[]> {
-    await delay();
-    return storage.getServices();
+    return request<ServiceItem[]>('/settings/services');
   },
 
   async createService(service: Omit<ServiceItem, 'id'>): Promise<ServiceItem> {
-    await delay();
-    return storage.addService(service);
+    return request<ServiceItem>('/settings/services', {
+      method: 'POST',
+      body: JSON.stringify(service),
+    });
   },
 
   async deleteService(id: string): Promise<boolean> {
-    await delay();
-    storage.deleteService(id);
+    await request(`/settings/services/${id}`, { method: 'DELETE' });
     return true;
   },
 
   // Categories
   async getExpenseCategories(): Promise<string[]> {
-    await delay();
-    return storage.getCategories();
+    return request<string[]>('/expenses/categories');
   },
 
   async addExpenseCategory(category: string): Promise<string[]> {
-    await delay();
-    return storage.addCategory(category);
+    return request<string[]>('/expenses/categories', {
+      method: 'POST',
+      body: JSON.stringify({ name: category }),
+    });
   },
 
   async deleteExpenseCategory(category: string): Promise<string[]> {
-    await delay();
-    return storage.deleteCategory(category);
+    return request<string[]>(`/expenses/categories/${encodeURIComponent(category)}`, {
+      method: 'DELETE',
+    });
   },
 
   // Settings
   async getSettings(): Promise<Settings> {
-    await delay();
-    return storage.getSettings();
+    return request<Settings>('/settings');
   },
 
   async updateSettings(settings: Partial<Settings>): Promise<Settings> {
-    await delay();
-    return storage.updateSettings(settings);
+    return request<Settings>('/settings', {
+      method: 'PUT',
+      body: JSON.stringify(settings),
+    });
   },
 
   // Inventory & Stock Management
   async getInventoryCategories(): Promise<InventoryCategory[]> {
-    await delay();
-    return storage.getInventoryCategories();
+    return request<InventoryCategory[]>('/inventory/categories');
   },
 
   async addInventoryCategory(name: string): Promise<InventoryCategory> {
-    await delay();
-    return storage.addInventoryCategory(name);
+    return request<InventoryCategory>('/inventory/categories', {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    });
   },
 
   async getInventoryItems(includeInactive = false): Promise<InventoryItem[]> {
-    await delay();
-    return storage.getInventoryItems(includeInactive);
+    return request<InventoryItem[]>(`/inventory/items?includeInactive=${includeInactive}`);
   },
 
   async getInventoryItemById(id: string): Promise<InventoryItem | undefined> {
-    await delay();
-    return storage.getInventoryItemById(id);
+    try {
+      return await request<InventoryItem>(`/inventory/items/${id}`);
+    } catch {
+      return undefined;
+    }
   },
 
   async createInventoryItem(itemData: {
@@ -292,13 +419,17 @@ export const api = {
     minimumStock: number;
     notes?: string;
   }): Promise<InventoryItem> {
-    await delay();
-    return storage.createInventoryItem(itemData);
+    return request<InventoryItem>('/inventory/items', {
+      method: 'POST',
+      body: JSON.stringify(itemData),
+    });
   },
 
   async updateInventoryItem(id: string, data: Partial<InventoryItem>): Promise<InventoryItem | null> {
-    await delay();
-    return storage.updateInventoryItem(id, data);
+    return request<InventoryItem>(`/inventory/items/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
   },
 
   async stockIn(
@@ -309,8 +440,10 @@ export const api = {
     reason: string,
     note?: string
   ): Promise<{ item: InventoryItem; movement: StockMovement } | null> {
-    await delay();
-    return storage.stockIn(itemId, quantity, unitCost, date, reason, note);
+    return request<{ item: InventoryItem; movement: StockMovement }>(`/inventory/items/${itemId}/stock-in`, {
+      method: 'POST',
+      body: JSON.stringify({ quantity, unitCost, date, reason, note }),
+    });
   },
 
   async stockOut(
@@ -320,8 +453,10 @@ export const api = {
     reason: string,
     note?: string
   ): Promise<{ item: InventoryItem; movement: StockMovement } | null> {
-    await delay();
-    return storage.stockOut(itemId, quantity, date, reason, note);
+    return request<{ item: InventoryItem; movement: StockMovement }>(`/inventory/items/${itemId}/stock-out`, {
+      method: 'POST',
+      body: JSON.stringify({ quantity, date, reason, note }),
+    });
   },
 
   async adjustStock(
@@ -331,38 +466,43 @@ export const api = {
     reason: string,
     note?: string
   ): Promise<{ item: InventoryItem; movement: StockMovement } | null> {
-    await delay();
-    return storage.adjustStock(itemId, physicalQuantity, date, reason, note);
+    return request<{ item: InventoryItem; movement: StockMovement }>(`/inventory/items/${itemId}/adjust`, {
+      method: 'POST',
+      body: JSON.stringify({ physicalQuantity, date, reason, note }),
+    });
   },
 
   async getStockHistory(itemId?: string): Promise<StockMovement[]> {
-    await delay();
-    return storage.getStockHistory(itemId);
+    const query = itemId ? `?itemId=${itemId}` : '';
+    return request<StockMovement[]>(`/inventory/movements${query}`);
   },
 
   async getInventorySummary(): Promise<InventorySummary> {
-    await delay();
-    return storage.getInventorySummary();
+    return request<InventorySummary>('/inventory/summary');
   },
 
   async deactivateInventoryItem(id: string): Promise<boolean> {
-    await delay();
-    return storage.deactivateInventoryItem(id);
+    const res = await request<{ success: boolean }>(`/inventory/items/${id}/deactivate`, {
+      method: 'PATCH',
+    });
+    return res.success;
   },
 
   async reactivateInventoryItem(id: string): Promise<boolean> {
-    await delay();
-    return storage.reactivateInventoryItem(id);
+    const res = await request<{ success: boolean }>(`/inventory/items/${id}/reactivate`, {
+      method: 'PATCH',
+    });
+    return res.success;
   },
 
   async deleteInventoryItem(id: string): Promise<{ success: boolean; message?: string }> {
-    await delay();
-    return storage.deleteInventoryItem(id);
+    return request<{ success: boolean; message?: string }>(`/inventory/items/${id}`, {
+      method: 'DELETE',
+    });
   },
 
   // Reset
   async resetToDefault(): Promise<void> {
-    await delay();
-    storage.resetToDefault();
+    console.log('Reset triggered');
   }
 };

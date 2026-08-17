@@ -20,6 +20,7 @@ import { QuotationStatusBadge } from '../components/common/Badge';
 import { ConfirmDialog } from '../components/common/ConfirmDialog';
 import { EmptyState } from '../components/common/EmptyState';
 import { useApp } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 import { Quotation, QuotationStatus } from '../types';
 import { formatBDT, formatDate } from '../utils/formatters';
@@ -27,6 +28,7 @@ import { formatBDT, formatDate } from '../utils/formatters';
 export const QuotationsPage: React.FC = () => {
   const navigate = useNavigate();
   const { refreshTrigger, showToast, triggerRefresh } = useApp();
+  const { canDelete } = useAuth();
 
   const [quotations, setQuotations] = useState<Quotation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -286,19 +288,21 @@ export const QuotationsPage: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => navigate(`/quotations/${qt.id}`)}
-                          className="p-1.5 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                          className="p-1.5 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
                           title="View / Print Quotation"
                         >
                           <Eye className="w-4 h-4" />
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => setQuotationToDelete(qt)}
-                          className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                          title="Delete Quotation"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {canDelete && (
+                          <button
+                            type="button"
+                            onClick={() => setQuotationToDelete(qt)}
+                            className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                            title="Delete Quotation"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

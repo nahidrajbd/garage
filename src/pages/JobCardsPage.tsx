@@ -20,6 +20,7 @@ import { JobCardStatusBadge } from '../components/common/Badge';
 import { ConfirmDialog } from '../components/common/ConfirmDialog';
 import { EmptyState } from '../components/common/EmptyState';
 import { useApp } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 import { JobCard, JobCardStatus } from '../types';
 import { formatDate } from '../utils/formatters';
@@ -27,6 +28,7 @@ import { formatDate } from '../utils/formatters';
 export const JobCardsPage: React.FC = () => {
   const navigate = useNavigate();
   const { refreshTrigger, showToast, triggerRefresh } = useApp();
+  const { canDelete } = useAuth();
 
   const [jobCards, setJobCards] = useState<JobCard[]>([]);
   const [loading, setLoading] = useState(true);
@@ -305,19 +307,21 @@ export const JobCardsPage: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => navigate(`/job-cards/edit/${jc.id}`)}
-                          className="p-1.5 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                          className="p-1.5 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
                           title="Edit Job Card"
                         >
                           <Edit3 className="w-4 h-4" />
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => setCardToDelete(jc)}
-                          className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                          title="Delete Job Card"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {canDelete && (
+                          <button
+                            type="button"
+                            onClick={() => setCardToDelete(jc)}
+                            className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                            title="Delete Job Card"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

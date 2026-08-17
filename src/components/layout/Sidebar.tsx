@@ -16,14 +16,26 @@ import {
   Settings as SettingsIcon,
   Wrench,
   Phone,
-  MapPin
+  MapPin,
+  LogOut,
+  ShieldCheck,
+  UserCheck
 } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 interface SidebarProps {
   onNavClick?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ onNavClick }) => {
+  const { user, isSuperAdmin, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login', { replace: true });
+  };
   const navItems = [
     { label: 'Home', path: '/', icon: Home },
     { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
@@ -84,22 +96,35 @@ export const Sidebar: React.FC<SidebarProps> = ({ onNavClick }) => {
         })}
       </nav>
 
-      {/* Workshop Contact Footer */}
-      <div className="p-4 border-t border-neutral-800 bg-neutral-900/60 m-3 rounded-xl">
-        <p className="text-xs font-bold text-white uppercase tracking-wider font-heading">
-          Arshi Automobile
-        </p>
-        <div className="mt-2 space-y-1.5 text-xs text-gray-400">
-          <div className="flex items-center gap-2">
-            <MapPin className="w-3.5 h-3.5 text-gray-500 shrink-0" />
-            <span className="truncate">Rajshahi, Bangladesh</span>
+      {/* User Session & Logout Footer */}
+      {user && (
+        <div className="p-3 border-t border-neutral-800 bg-neutral-900/90 m-3 rounded-xl flex items-center justify-between">
+          <div className="flex items-center gap-2.5 overflow-hidden">
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white shrink-0 ${
+              isSuperAdmin ? 'bg-red-700' : 'bg-blue-700'
+            }`}>
+              {isSuperAdmin ? <ShieldCheck className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
+            </div>
+            <div className="overflow-hidden">
+              <p className="text-xs font-bold text-white truncate">
+                {user.name}
+              </p>
+              <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wider">
+                {isSuperAdmin ? 'Super Admin' : 'Staff'}
+              </p>
+            </div>
           </div>
-          <div className="flex items-center gap-2 font-mono text-gray-300">
-            <Phone className="w-3.5 h-3.5 text-[#C1121F] shrink-0" />
-            <span>01712110902</span>
-          </div>
+
+          <button
+            type="button"
+            onClick={handleLogout}
+            title="Sign Out"
+            className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-neutral-800 transition-colors cursor-pointer"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
         </div>
-      </div>
+      )}
     </aside>
   );
 };

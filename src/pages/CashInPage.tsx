@@ -15,12 +15,14 @@ import { PaymentMethodBadge } from '../components/common/Badge';
 import { ConfirmDialog } from '../components/common/ConfirmDialog';
 import { EmptyState } from '../components/common/EmptyState';
 import { useApp } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 import { CashIn, CashInType, PaymentMethod } from '../types';
 import { formatBDT, formatDate } from '../utils/formatters';
 
 export const CashInPage: React.FC = () => {
   const { refreshTrigger, openCashInModal, showToast, triggerRefresh } = useApp();
+  const { canDelete } = useAuth();
 
   const [cashInList, setCashInList] = useState<CashIn[]>([]);
   const [loading, setLoading] = useState(true);
@@ -282,14 +284,16 @@ export const CashInPage: React.FC = () => {
                     </td>
 
                     <td className="py-3.5 px-4 text-center whitespace-nowrap">
-                      <button
-                        type="button"
-                        onClick={() => setItemToDelete(item)}
-                        className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                        title="Delete Record"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {canDelete && (
+                        <button
+                          type="button"
+                          onClick={() => setItemToDelete(item)}
+                          className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                          title="Delete Record"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}

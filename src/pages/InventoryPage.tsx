@@ -26,12 +26,14 @@ import {
 } from '../types';
 import { formatBDT, formatDate } from '../utils/formatters';
 import { useApp } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
 import { StatCard } from '../components/common/StatCard';
 import { Modal } from '../components/common/Modal';
 import { InventoryStockBadge, StockMovementTypeBadge } from '../components/common/Badge';
 
 export const InventoryPage: React.FC = () => {
   const { showToast } = useApp();
+  const { canDelete } = useAuth();
 
   // Data states
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -784,20 +786,22 @@ export const InventoryPage: React.FC = () => {
                         </button>
 
                         {item.isActive ? (
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteOrDeactivate(item)}
-                            title="Delete or Deactivate"
-                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          canDelete && (
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteOrDeactivate(item)}
+                              title="Delete or Deactivate"
+                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )
                         ) : (
                           <button
                             type="button"
                             onClick={() => handleReactivate(item.id)}
                             title="Reactivate Item"
-                            className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                            className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
                           >
                             <RotateCcw className="w-3.5 h-3.5" />
                           </button>
