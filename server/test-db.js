@@ -61,8 +61,8 @@ async function runTests() {
       [qId, qNum, custId, vehId, 'Test Customer Name', testPhone, 'Rajshahi Metro-Test 12-34', 'Toyota Premio']
     );
     await conn.query(
-      `INSERT INTO quotation_items (id, quotation_id, service_name, quantity, unit_price, total)
-       VALUES (?, ?, 'Full Car Polish', 1, 3000.00, 3000.00)`,
+      `INSERT INTO quotation_items (id, quotation_id, item_type, description, quantity, unit_price, total)
+       VALUES (?, ?, 'service', 'Full Car Polish', 1.000, 3000.00, 3000.00)`,
       [`test-qti-${Date.now()}`, qId]
     );
   });
@@ -75,22 +75,22 @@ async function runTests() {
 
   await withTransaction(async (conn) => {
     await conn.query(
-      `INSERT INTO invoices (id, invoice_number, customer_id, vehicle_id, customer_name, customer_phone, vehicle_registration, vehicle_model, invoice_date, subtotal, discount, total, paid_amount, due_amount, status, payment_method)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURDATE(), 5000.00, 500.00, 4500.00, 2000.00, 2500.00, 'partial', 'Cash')`,
+      `INSERT INTO invoices (id, invoice_number, customer_id, vehicle_id, customer_name, customer_phone, vehicle_registration, vehicle_model, date, subtotal, discount, grand_total, paid, due, status, payment_method)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURDATE(), 5000.00, 500.00, 4500.00, 2000.00, 2500.00, 'partial', 'cash')`,
       [invId, invNum, custId, vehId, 'Test Customer Name', testPhone, 'Rajshahi Metro-Test 12-34', 'Toyota Premio']
     );
 
     // Initial payment
     await conn.query(
-      `INSERT INTO payments (id, invoice_id, amount, payment_method, payment_date, reference, notes)
+      `INSERT INTO payments (id, invoice_id, amount, payment_method, payment_date, reference, note)
        VALUES (?, ?, 2000.00, 'cash', CURDATE(), ?, 'Advance payment')`,
       [`test-pmt-1-${Date.now()}`, invId, invNum]
     );
 
     // Financial transaction ledger entry
     await conn.query(
-      `INSERT INTO financial_transactions (id, transaction_type, category, reference_type, reference_id, description, amount, payment_method, transaction_date)
-       VALUES (?, 'cash_in', 'Service Payment', 'invoice_payment', ?, ?, 2000.00, 'cash', CURDATE())`,
+      `INSERT INTO financial_transactions (id, type, category, reference_type, reference_id, description, amount, payment_method, date)
+       VALUES (?, 'INCOME', 'Service Payment', 'invoice_payment', ?, ?, 2000.00, 'cash', CURDATE())`,
       [`test-tx-1-${Date.now()}`, invNum, `Invoice payment for ${invNum}`]
     );
   });
@@ -101,17 +101,17 @@ async function runTests() {
   await withTransaction(async (conn) => {
     // Record second payment 2500 -> total paid = 4500, due = 0, status = 'paid'
     await conn.query(
-      `UPDATE invoices SET paid_amount = 4500.00, due_amount = 0.00, status = 'paid' WHERE id = ?`,
+      `UPDATE invoices SET paid = 4500.00, due = 0.00, status = 'paid' WHERE id = ?`,
       [invId]
     );
     await conn.query(
-      `INSERT INTO payments (id, invoice_id, amount, payment_method, payment_date, reference, notes)
+      `INSERT INTO payments (id, invoice_id, amount, payment_method, payment_date, reference, note)
        VALUES (?, ?, 2500.00, 'bkash', CURDATE(), ?, 'Final settlement')`,
       [`test-pmt-2-${Date.now()}`, invId, invNum]
     );
     await conn.query(
-      `INSERT INTO financial_transactions (id, transaction_type, category, reference_type, reference_id, description, amount, payment_method, transaction_date)
-       VALUES (?, 'cash_in', 'Service Payment', 'invoice_payment', ?, ?, 2500.00, 'bkash', CURDATE())`,
+      `INSERT INTO financial_transactions (id, type, category, reference_type, reference_id, description, amount, payment_method, date)
+       VALUES (?, 'INCOME', 'Service Payment', 'invoice_payment', ?, ?, 2500.00, 'bkash', CURDATE())`,
       [`test-tx-2-${Date.now()}`, invNum, `Due collection for ${invNum}`]
     );
   });
