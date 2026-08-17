@@ -13,7 +13,11 @@ import {
   LoanSummary,
   Settings,
   DashboardMetrics,
-  Transaction
+  Transaction,
+  InventoryCategory,
+  InventoryItem,
+  StockMovement,
+  InventorySummary
 } from '../types';
 import { initialStaff } from '../mock/initialData';
 
@@ -256,6 +260,104 @@ export const api = {
   async updateSettings(settings: Partial<Settings>): Promise<Settings> {
     await delay();
     return storage.updateSettings(settings);
+  },
+
+  // Inventory & Stock Management
+  async getInventoryCategories(): Promise<InventoryCategory[]> {
+    await delay();
+    return storage.getInventoryCategories();
+  },
+
+  async addInventoryCategory(name: string): Promise<InventoryCategory> {
+    await delay();
+    return storage.addInventoryCategory(name);
+  },
+
+  async getInventoryItems(includeInactive = false): Promise<InventoryItem[]> {
+    await delay();
+    return storage.getInventoryItems(includeInactive);
+  },
+
+  async getInventoryItemById(id: string): Promise<InventoryItem | undefined> {
+    await delay();
+    return storage.getInventoryItemById(id);
+  },
+
+  async createInventoryItem(itemData: {
+    name: string;
+    categoryId: string;
+    unit: string;
+    initialQuantity: number;
+    unitCost: number;
+    minimumStock: number;
+    notes?: string;
+  }): Promise<InventoryItem> {
+    await delay();
+    return storage.createInventoryItem(itemData);
+  },
+
+  async updateInventoryItem(id: string, data: Partial<InventoryItem>): Promise<InventoryItem | null> {
+    await delay();
+    return storage.updateInventoryItem(id, data);
+  },
+
+  async stockIn(
+    itemId: string,
+    quantity: number,
+    unitCost: number,
+    date: string,
+    reason: string,
+    note?: string
+  ): Promise<{ item: InventoryItem; movement: StockMovement } | null> {
+    await delay();
+    return storage.stockIn(itemId, quantity, unitCost, date, reason, note);
+  },
+
+  async stockOut(
+    itemId: string,
+    quantity: number,
+    date: string,
+    reason: string,
+    note?: string
+  ): Promise<{ item: InventoryItem; movement: StockMovement } | null> {
+    await delay();
+    return storage.stockOut(itemId, quantity, date, reason, note);
+  },
+
+  async adjustStock(
+    itemId: string,
+    physicalQuantity: number,
+    date: string,
+    reason: string,
+    note?: string
+  ): Promise<{ item: InventoryItem; movement: StockMovement } | null> {
+    await delay();
+    return storage.adjustStock(itemId, physicalQuantity, date, reason, note);
+  },
+
+  async getStockHistory(itemId?: string): Promise<StockMovement[]> {
+    await delay();
+    return storage.getStockHistory(itemId);
+  },
+
+  async getInventorySummary(): Promise<InventorySummary> {
+    await delay();
+    return storage.getInventorySummary();
+  },
+
+  async deactivateInventoryItem(id: string): Promise<boolean> {
+    await delay();
+    return storage.deactivateInventoryItem(id);
+  },
+
+  async reactivateInventoryItem(id: string): Promise<boolean> {
+    await delay();
+    return storage.reactivateInventoryItem(id);
+  },
+
+  async deleteInventoryItem(id: string): Promise<{ success: boolean; message?: string }> {
+    await delay();
+    return storage.deleteInventoryItem(id);
   },
 
   // Reset

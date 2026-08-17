@@ -121,4 +121,32 @@ export const PaymentMethodBadge: React.FC<{ method: PaymentMethod }> = ({ method
   return <Badge variant={variant} size="sm">{method}</Badge>;
 };
 
+export const InventoryStockBadge: React.FC<{
+  quantity: number;
+  minimumStock: number;
+  isActive?: boolean;
+}> = ({ quantity, minimumStock, isActive = true }) => {
+  if (!isActive) {
+    return <Badge variant="draft" size="sm">Deactivated</Badge>;
+  }
+  if (quantity === 0) {
+    return <Badge variant="due" size="sm">Out of Stock</Badge>;
+  }
+  if (quantity <= minimumStock) {
+    return <Badge variant="partial" size="sm">Low Stock</Badge>;
+  }
+  return <Badge variant="paid" size="sm">In Stock</Badge>;
+};
+
+export const StockMovementTypeBadge: React.FC<{ type: 'IN' | 'OUT' | 'ADJUSTMENT' }> = ({ type }) => {
+  if (type === 'IN') {
+    return <Badge variant="in" size="sm">Stock In</Badge>;
+  }
+  if (type === 'OUT') {
+    return <Badge variant="out" size="sm">Stock Out</Badge>;
+  }
+  return <Badge variant="sent" size="sm">Adjustment</Badge>;
+};
+
+
 

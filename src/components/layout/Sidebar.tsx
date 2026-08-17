@@ -1,11 +1,13 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import {
+  Home,
   LayoutDashboard,
   ClipboardCheck,
   ClipboardList,
   FileText,
   Users,
+  Package,
   ArrowDownLeft,
   ArrowUpRight,
   Receipt,
@@ -23,11 +25,13 @@ interface SidebarProps {
 
 export const Sidebar: React.FC<SidebarProps> = ({ onNavClick }) => {
   const navItems = [
-    { label: 'Dashboard', path: '/', icon: LayoutDashboard },
+    { label: 'Home', path: '/', icon: Home },
+    { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
     { label: 'Job Cards', path: '/job-cards', icon: ClipboardCheck },
     { label: 'Quotations', path: '/quotations', icon: ClipboardList },
     { label: 'Invoices', path: '/invoices', icon: FileText },
     { label: 'Customers', path: '/customers', icon: Users },
+    { label: 'Inventory', path: '/inventory', icon: Package },
     { label: 'Cash In', path: '/cash-in', icon: ArrowDownLeft, color: 'text-emerald-500' },
     { label: 'Expenses', path: '/expenses', icon: ArrowUpRight, color: 'text-rose-500' },
     { label: 'Transactions', path: '/transactions', icon: Receipt },

@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AppProvider } from './context/AppContext';
 import { AppLayout } from './components/layout/AppLayout';
 
+import { CoverPage } from './pages/CoverPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { JobCardsPage } from './pages/JobCardsPage';
 import { CreateJobCardPage } from './pages/CreateJobCardPage';
@@ -14,6 +15,7 @@ import { InvoicesPage } from './pages/InvoicesPage';
 import { CreateInvoicePage } from './pages/CreateInvoicePage';
 import { InvoiceDetailsPage } from './pages/InvoiceDetailsPage';
 import { CustomersPage } from './pages/CustomersPage';
+import { InventoryPage } from './pages/InventoryPage';
 import { CashInPage } from './pages/CashInPage';
 import { ExpensesPage } from './pages/ExpensesPage';
 import { TransactionsPage } from './pages/TransactionsPage';
@@ -27,7 +29,8 @@ export const App: React.FC = () => {
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<AppLayout />}>
-            <Route index element={<DashboardPage />} />
+            <Route index element={<CoverPage />} />
+            <Route path="dashboard" element={<DashboardPage />} />
             <Route path="job-cards" element={<JobCardsPage />} />
             <Route path="job-cards/new" element={<CreateJobCardPage />} />
             <Route path="job-cards/:id" element={<JobCardDetailsPage />} />
@@ -40,6 +43,7 @@ export const App: React.FC = () => {
             <Route path="invoices/new" element={<CreateInvoicePage />} />
             <Route path="invoices/:id" element={<InvoiceDetailsPage />} />
             <Route path="customers" element={<CustomersPage />} />
+            <Route path="inventory" element={<InventoryPage />} />
             <Route path="cash-in" element={<CashInPage />} />
             <Route path="expenses" element={<ExpensesPage />} />
             <Route path="transactions" element={<TransactionsPage />} />

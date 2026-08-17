@@ -247,3 +247,54 @@ export interface DashboardMetrics {
   inProgressJobCardsCount?: number;
   completedTodayJobCardsCount?: number;
 }
+
+// ==========================================
+// INVENTORY SYSTEM TYPES (Physical Stock)
+// ==========================================
+export type StockMovementType = 'IN' | 'OUT' | 'ADJUSTMENT';
+
+export type InventoryStockStatus = 'In Stock' | 'Low Stock' | 'Out of Stock';
+
+export interface InventoryCategory {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface InventoryItem {
+  id: string;
+  name: string;
+  categoryId: string;
+  categoryName?: string;
+  unit: string;
+  quantity: number;
+  averageUnitCost: number;
+  minimumStock: number;
+  notes?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface StockMovement {
+  id: string;
+  itemId: string;
+  itemName?: string;
+  type: StockMovementType;
+  quantity: number;
+  unitCost: number;
+  totalValue: number;
+  reason: string;
+  note?: string;
+  date: string;
+  createdAt: string;
+}
+
+export interface InventorySummary {
+  totalItems: number;
+  lowStockCount: number;
+  outOfStockCount: number;
+  totalInventoryValue: number;
+}
+

@@ -12,7 +12,11 @@ import {
   Settings,
   LoanSummary,
   DashboardMetrics,
-  Transaction
+  Transaction,
+  InventoryCategory,
+  InventoryItem,
+  StockMovement,
+  InventorySummary
 } from '../types';
 import {
   initialCustomers,
@@ -24,7 +28,10 @@ import {
   initialServices,
   initialLoanRecords,
   initialSettings,
-  initialExpenseCategories
+  initialExpenseCategories,
+  initialInventoryCategories,
+  initialInventoryItems,
+  initialStockMovements
 } from '../mock/initialData';
 
 const KEYS = {
@@ -38,6 +45,9 @@ const KEYS = {
   LOANS: 'arshi_loans_v1',
   SETTINGS: 'arshi_settings_v1',
   EXPENSE_CATEGORIES: 'arshi_categories_v1',
+  INVENTORY_CATEGORIES: 'arshi_inventory_categories_v1',
+  INVENTORY_ITEMS: 'arshi_inventory_items_v1',
+  STOCK_MOVEMENTS: 'arshi_stock_movements_v1'
 };
 
 function getFromStorage<T>(key: string, fallback: T): T {
@@ -71,6 +81,9 @@ export const storage = {
     saveToStorage(KEYS.LOANS, initialLoanRecords);
     saveToStorage(KEYS.SETTINGS, initialSettings);
     saveToStorage(KEYS.EXPENSE_CATEGORIES, initialExpenseCategories);
+    saveToStorage(KEYS.INVENTORY_CATEGORIES, initialInventoryCategories);
+    saveToStorage(KEYS.INVENTORY_ITEMS, initialInventoryItems);
+    saveToStorage(KEYS.STOCK_MOVEMENTS, initialStockMovements);
   },
 
   // Settings
@@ -649,5 +662,347 @@ export const storage = {
       inProgressJobCardsCount,
       completedTodayJobCardsCount
     };
+  },
+
+  // ==========================================
+  // INVENTORY & STOCK MANAGEMENT METHODS
+  // ==========================================
+
+  // Categories
+  getInventoryCategories: (): InventoryCategory[] => {
+    return getFromStorage<InventoryCategory[]>(KEYS.INVENTORY_CATEGORIES, initialInventoryCategories);
+  },
+
+  addInventoryCategory: (name: string): InventoryCategory => {
+    const categories = storage.getInventoryCategories();
+    const existing = categories.find(c => c.name.toLowerCase() === name.trim().toLowerCase());
+    if (existing) return existing;
+
+    const newCategory: InventoryCategory = {
+      id: `cat-${Date.now()}`,
+      name: name.trim(),
+      createdAt: new Date().toISOString().split('T')[0]
+    };
+    categories.push(newCategory);
+    saveToStorage(KEYS.INVENTORY_CATEGORIES, categories);
+    return newCategory;
+  },
+
+  // Items
+  getInventoryItems: (includeInactive = false): InventoryItem[] => {
+    const items = getFromStorage<InventoryItem[]>(KEYS.INVENTORY_ITEMS, initialInventoryItems);
+    const categories = storage.getInventoryCategories();
+    const catMap = new Map(categories.map(c => [c.id, c.name]));
+
+    const enriched = items.map(item => ({
+      ...item,
+      categoryName: catMap.get(item.categoryId) || item.categoryName || 'Other'
+    }));
+
+    if (includeInactive) return enriched;
+    return enriched.filter(i => i.isActive !== false);
+  },
+
+  getInventoryItemById: (id: string): InventoryItem | undefined => {
+    const items = storage.getInventoryItems(true);
+    return items.find(i => i.id === id);
+  },
+
+  createInventoryItem: (itemData: {
+    name: string;
+    categoryId: string;
+    unit: string;
+    initialQuantity: number;
+    unitCost: number;
+    minimumStock: number;
+    notes?: string;
+  }): InventoryItem => {
+    const items = storage.getInventoryItems(true);
+    const categories = storage.getInventoryCategories();
+    const category = categories.find(c => c.id === itemData.categoryId);
+
+    const now = new Date().toISOString();
+    const todayStr = now.split('T')[0];
+
+    const initialQty = Math.max(0, Number(itemData.initialQuantity) || 0);
+    const unitCost = Math.max(0, Number(itemData.unitCost) || 0);
+    const minStock = Math.max(0, Number(itemData.minimumStock) || 0);
+
+    const newItem: InventoryItem = {
+      id: `inv-item-${Date.now()}`,
+      name: itemData.name.trim(),
+      categoryId: itemData.categoryId,
+      categoryName: category?.name || 'Other',
+      unit: itemData.unit.trim() || 'Piece',
+      quantity: initialQty,
+      averageUnitCost: unitCost,
+      minimumStock: minStock,
+      notes: itemData.notes?.trim() || undefined,
+      isActive: true,
+      createdAt: todayStr,
+      updatedAt: todayStr
+    };
+
+    items.push(newItem);
+    saveToStorage(KEYS.INVENTORY_ITEMS, items);
+
+    // If initial quantity > 0, log initial stock movement
+    if (initialQty > 0) {
+      const movements = storage.getStockHistory();
+      const initialMovement: StockMovement = {
+        id: `mov-${Date.now()}`,
+        itemId: newItem.id,
+        itemName: newItem.name,
+        type: 'IN',
+        quantity: initialQty,
+        unitCost: unitCost,
+        totalValue: initialQty * unitCost,
+        reason: 'Initial Stock',
+        note: 'Opening balance',
+        date: todayStr,
+        createdAt: now
+      };
+      movements.unshift(initialMovement);
+      saveToStorage(KEYS.STOCK_MOVEMENTS, movements);
+    }
+
+    return newItem;
+  },
+
+  updateInventoryItem: (id: string, data: Partial<InventoryItem>): InventoryItem | null => {
+    const items = storage.getInventoryItems(true);
+    const idx = items.findIndex(i => i.id === id);
+    if (idx === -1) return null;
+
+    const current = items[idx];
+    const updated: InventoryItem = {
+      ...current,
+      ...data,
+      updatedAt: new Date().toISOString().split('T')[0]
+    };
+
+    items[idx] = updated;
+    saveToStorage(KEYS.INVENTORY_ITEMS, items);
+    return updated;
+  },
+
+  // Stock In: Increases quantity & calculates new weighted average unit cost
+  stockIn: (
+    itemId: string,
+    quantity: number,
+    unitCost: number,
+    date: string,
+    reason: string,
+    note?: string
+  ): { item: InventoryItem; movement: StockMovement } | null => {
+    const items = storage.getInventoryItems(true);
+    const item = items.find(i => i.id === itemId);
+    if (!item) return null;
+
+    const qtyIn = Math.max(0, Number(quantity) || 0);
+    const costIn = Math.max(0, Number(unitCost) || 0);
+    if (qtyIn <= 0) throw new Error('Quantity must be greater than zero.');
+
+    const currentQty = item.quantity;
+    const currentAvgCost = item.averageUnitCost;
+
+    // Weighted Average Cost calculation: (Existing Value + New Value) / New Total Quantity
+    const existingValue = currentQty * currentAvgCost;
+    const newValue = qtyIn * costIn;
+    const newTotalQty = currentQty + qtyIn;
+    const newAvgCost = newTotalQty > 0 ? (existingValue + newValue) / newTotalQty : costIn;
+
+    item.quantity = newTotalQty;
+    item.averageUnitCost = Number(newAvgCost.toFixed(2));
+    item.updatedAt = date || new Date().toISOString().split('T')[0];
+
+    saveToStorage(KEYS.INVENTORY_ITEMS, items);
+
+    // Record Stock Movement
+    const movements = storage.getStockHistory();
+    const movement: StockMovement = {
+      id: `mov-${Date.now()}`,
+      itemId: item.id,
+      itemName: item.name,
+      type: 'IN',
+      quantity: qtyIn,
+      unitCost: costIn,
+      totalValue: qtyIn * costIn,
+      reason: reason || 'Received',
+      note: note?.trim() || undefined,
+      date: date || new Date().toISOString().split('T')[0],
+      createdAt: new Date().toISOString()
+    };
+    movements.unshift(movement);
+    saveToStorage(KEYS.STOCK_MOVEMENTS, movements);
+
+    return { item, movement };
+  },
+
+  // Stock Out: Decreases quantity, checks availability, preserves unit cost
+  stockOut: (
+    itemId: string,
+    quantity: number,
+    date: string,
+    reason: string,
+    note?: string
+  ): { item: InventoryItem; movement: StockMovement } | null => {
+    const items = storage.getInventoryItems(true);
+    const item = items.find(i => i.id === itemId);
+    if (!item) return null;
+
+    const qtyOut = Math.max(0, Number(quantity) || 0);
+    if (qtyOut <= 0) throw new Error('Quantity must be greater than zero.');
+
+    if (qtyOut > item.quantity) {
+      throw new Error(`Available stock is only ${item.quantity}. You cannot remove ${qtyOut}.`);
+    }
+
+    const newQty = item.quantity - qtyOut;
+    item.quantity = newQty;
+    item.updatedAt = date || new Date().toISOString().split('T')[0];
+
+    saveToStorage(KEYS.INVENTORY_ITEMS, items);
+
+    // Record Stock Movement (quantity recorded as negative for ledger)
+    const movements = storage.getStockHistory();
+    const movement: StockMovement = {
+      id: `mov-${Date.now()}`,
+      itemId: item.id,
+      itemName: item.name,
+      type: 'OUT',
+      quantity: -qtyOut,
+      unitCost: item.averageUnitCost,
+      totalValue: qtyOut * item.averageUnitCost,
+      reason: reason || 'Used',
+      note: note?.trim() || undefined,
+      date: date || new Date().toISOString().split('T')[0],
+      createdAt: new Date().toISOString()
+    };
+    movements.unshift(movement);
+    saveToStorage(KEYS.STOCK_MOVEMENTS, movements);
+
+    return { item, movement };
+  },
+
+  // Stock Adjustment: Corrects physical count, validates non-negative, preserves unit cost
+  adjustStock: (
+    itemId: string,
+    physicalQuantity: number,
+    date: string,
+    reason: string,
+    note?: string
+  ): { item: InventoryItem; movement: StockMovement } | null => {
+    const items = storage.getInventoryItems(true);
+    const item = items.find(i => i.id === itemId);
+    if (!item) return null;
+
+    const newPhysicalQty = Math.max(0, Number(physicalQuantity) || 0);
+    const delta = newPhysicalQty - item.quantity;
+
+    if (delta === 0) {
+      return { item, movement: null as unknown as StockMovement };
+    }
+
+    item.quantity = newPhysicalQty;
+    item.updatedAt = date || new Date().toISOString().split('T')[0];
+
+    saveToStorage(KEYS.INVENTORY_ITEMS, items);
+
+    // Record Adjustment Movement
+    const movements = storage.getStockHistory();
+    const movement: StockMovement = {
+      id: `mov-${Date.now()}`,
+      itemId: item.id,
+      itemName: item.name,
+      type: 'ADJUSTMENT',
+      quantity: delta,
+      unitCost: item.averageUnitCost,
+      totalValue: Math.abs(delta) * item.averageUnitCost,
+      reason: reason || 'Physical Count',
+      note: note?.trim() || undefined,
+      date: date || new Date().toISOString().split('T')[0],
+      createdAt: new Date().toISOString()
+    };
+    movements.unshift(movement);
+    saveToStorage(KEYS.STOCK_MOVEMENTS, movements);
+
+    return { item, movement };
+  },
+
+  // History
+  getStockHistory: (itemId?: string): StockMovement[] => {
+    const movements = getFromStorage<StockMovement[]>(KEYS.STOCK_MOVEMENTS, initialStockMovements);
+    if (itemId) {
+      return movements.filter(m => m.itemId === itemId);
+    }
+    return movements;
+  },
+
+  // Summary Metrics
+  getInventorySummary: (): InventorySummary => {
+    const items = storage.getInventoryItems(false); // active only
+
+    const totalItems = items.length;
+    const lowStockCount = items.filter(i => i.quantity > 0 && i.quantity <= i.minimumStock).length;
+    const outOfStockCount = items.filter(i => i.quantity === 0).length;
+    const totalInventoryValue = items.reduce(
+      (sum, i) => sum + i.quantity * i.averageUnitCost,
+      0
+    );
+
+    return {
+      totalItems,
+      lowStockCount,
+      outOfStockCount,
+      totalInventoryValue: Math.round(totalInventoryValue)
+    };
+  },
+
+  // Deactivate
+  deactivateInventoryItem: (id: string): boolean => {
+    const items = storage.getInventoryItems(true);
+    const item = items.find(i => i.id === id);
+    if (!item) return false;
+
+    item.isActive = false;
+    item.updatedAt = new Date().toISOString().split('T')[0];
+    saveToStorage(KEYS.INVENTORY_ITEMS, items);
+    return true;
+  },
+
+  // Reactivate
+  reactivateInventoryItem: (id: string): boolean => {
+    const items = storage.getInventoryItems(true);
+    const item = items.find(i => i.id === id);
+    if (!item) return false;
+
+    item.isActive = true;
+    item.updatedAt = new Date().toISOString().split('T')[0];
+    saveToStorage(KEYS.INVENTORY_ITEMS, items);
+    return true;
+  },
+
+  // Delete
+  deleteInventoryItem: (id: string): { success: boolean; message?: string } => {
+    const items = storage.getInventoryItems(true);
+    const movements = storage.getStockHistory(id);
+
+    // If item has operational history beyond initial opening stock
+    const operationalMovements = movements.filter(m => m.reason !== 'Initial Stock');
+    if (operationalMovements.length > 0) {
+      return {
+        success: false,
+        message: 'Item has recorded movements and cannot be deleted. Deactivate it instead.'
+      };
+    }
+
+    const filteredItems = items.filter(i => i.id !== id);
+    saveToStorage(KEYS.INVENTORY_ITEMS, filteredItems);
+
+    const filteredMovements = storage.getStockHistory().filter(m => m.itemId !== id);
+    saveToStorage(KEYS.STOCK_MOVEMENTS, filteredMovements);
+
+    return { success: true };
   }
 };
