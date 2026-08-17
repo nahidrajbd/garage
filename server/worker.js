@@ -233,7 +233,7 @@ export default {
       try {
         const metrics = await withDb(env, async (conn) => {
           const [invCount] = await conn.query('SELECT COUNT(*) as c FROM invoices');
-          const [custCount] = await conn.query('SELECT COUNT(*) as c FROM customers');
+          const [custCount] = await conn.query('SELECT COUNT(*) as c FROM customers WHERE status = "active"');
           const [jcActive] = await conn.query('SELECT COUNT(*) as c FROM job_cards WHERE status IN ("waiting", "in_progress")');
           const [finRows] = await conn.query(`
             SELECT 
@@ -243,14 +243,14 @@ export default {
           `);
           const [invSummary] = await conn.query(`
             SELECT 
-              COALESCE(SUM(total), 0) as totalBilled,
-              COALESCE(SUM(paid_amount), 0) as totalPaid,
-              COALESCE(SUM(due_amount), 0) as totalDue
+              COALESCE(SUM(grand_total), 0) as totalBilled,
+              COALESCE(SUM(paid), 0) as totalPaid,
+              COALESCE(SUM(due), 0) as totalDue
             FROM invoices
           `);
           const [recentInvoices] = await conn.query(`
-            SELECT id, invoice_number as invoiceNumber, customer_name as customerName, invoice_date as date, total as grandTotal, paid_amount as paid, due_amount as due, status, payment_method as paymentMethod
-            FROM invoices ORDER BY invoice_date DESC, created_at DESC LIMIT 5
+            SELECT id, invoice_number as invoiceNumber, customer_name as customerName, date, grand_total as grandTotal, paid, due, status, payment_method as paymentMethod
+            FROM invoices ORDER BY date DESC, created_at DESC LIMIT 5
           `);
           const [recentJobCards] = await conn.query(`
             SELECT id, job_card_number as jobCardNumber, customer_name as customerName, vehicle_model as vehicleModel, vehicle_registration as vehicleRegistration, date, status
@@ -271,7 +271,7 @@ export default {
             totalExpense: tExpense,
             netProfit: tIncome - tExpense,
             recentInvoices: recentInvoices.map(r => ({ ...r, grandTotal: Number(r.grandTotal), paid: Number(r.paid), due: Number(r.due) })),
-            recentJobCards,
+            recentJobCards: recentJobCards.map(r => ({ ...r, status: statusMapToFrontend[r.status] || 'Waiting' })),
           };
         });
         return jsonResponse(metrics, 200, corsHeaders);
@@ -487,16 +487,18 @@ export default {
         const customers = await withDb(env, async (conn) => {
           const [custs] = await conn.query('SELECT * FROM customers WHERE status = "active" ORDER BY created_at DESC');
           const [vehs] = await conn.query('SELECT * FROM vehicles');
-          const [invoices] = await conn.query('SELECT customer_id, invoice_date as date FROM invoices ORDER BY invoice_date DESC');
+          const [invoices] = await conn.query('SELECT customer_id, date FROM invoices ORDER BY date DESC');
 
           return custs.map(c => {
             const cVehs = vehs.filter(v => v.customer_id === c.id).map(v => ({
               id: v.id,
-              regNo: v.registration_number,
-              make: v.make,
-              model: v.model,
-              year: v.model_year,
-              color: v.color,
+              customerId: v.customer_id,
+              registrationNumber: v.registration_number || '',
+              regNo: v.registration_number || '',
+              make: v.make || '',
+              model: v.model || '',
+              year: v.model_year || '',
+              color: v.color || '',
             }));
             const cInvs = invoices.filter(i => i.customer_id === c.id);
             return {
@@ -508,8 +510,8 @@ export default {
               notes: c.notes,
               vehicles: cVehs,
               totalVisits: cInvs.length,
-              lastServiceDate: cInvs.length > 0 ? cInvs[0].date : (c.created_at ? new Date(c.created_at).toISOString().split('T')[0] : ''),
-              createdAt: c.created_at,
+              lastServiceDate: cInvs.length > 0 ? (typeof cInvs[0].date === 'string' ? cInvs[0].date : new Date(cInvs[0].date).toISOString().split('T')[0]) : (c.created_at ? new Date(c.created_at).toISOString().split('T')[0] : ''),
+              createdAt: typeof c.created_at === 'string' ? c.created_at : (c.created_at ? new Date(c.created_at).toISOString() : ''),
             };
           });
         });
@@ -527,7 +529,7 @@ export default {
           if (custs.length === 0) return null;
           const c = custs[0];
           const [vehs] = await conn.query('SELECT * FROM vehicles WHERE customer_id = ?', [id]);
-          const [invoices] = await conn.query('SELECT customer_id, invoice_date as date FROM invoices WHERE customer_id = ? ORDER BY invoice_date DESC', [id]);
+          const [invoices] = await conn.query('SELECT customer_id, date FROM invoices WHERE customer_id = ? ORDER BY date DESC', [id]);
           return {
             id: c.id,
             name: c.name,
@@ -535,9 +537,18 @@ export default {
             email: c.email,
             address: c.address,
             notes: c.notes,
-            vehicles: vehs.map(v => ({ id: v.id, regNo: v.registration_number, make: v.make, model: v.model, year: v.model_year, color: v.color })),
+            vehicles: vehs.map(v => ({
+              id: v.id,
+              customerId: v.customer_id,
+              registrationNumber: v.registration_number || '',
+              regNo: v.registration_number || '',
+              make: v.make || '',
+              model: v.model || '',
+              year: v.model_year || '',
+              color: v.color || '',
+            })),
             totalVisits: invoices.length,
-            lastServiceDate: invoices.length > 0 ? invoices[0].date : '',
+            lastServiceDate: invoices.length > 0 ? (typeof invoices[0].date === 'string' ? invoices[0].date : new Date(invoices[0].date).toISOString().split('T')[0]) : '',
             createdAt: c.created_at,
           };
         });
@@ -561,12 +572,15 @@ export default {
           const vehicles = [];
           if (body.vehicles && Array.isArray(body.vehicles)) {
             for (const v of body.vehicles) {
-              const vId = `veh-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
-              await conn.query(
-                'INSERT INTO vehicles (id, customer_id, registration_number, make, model, model_year, color, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())',
-                [vId, custId, v.regNo.trim(), v.make || null, v.model.trim(), v.year || null, v.color || null]
-              );
-              vehicles.push({ id: vId, regNo: v.regNo.trim(), make: v.make, model: v.model.trim(), year: v.year, color: v.color });
+              const reg = (v.registrationNumber || v.regNo || '').trim();
+              if (reg) {
+                const vId = v.id || `veh-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`;
+                await conn.query(
+                  'INSERT INTO vehicles (id, customer_id, registration_number, make, model, model_year, color, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())',
+                  [vId, custId, reg, v.make || null, (v.model || 'Vehicle').trim(), v.year || null, v.color || null]
+                );
+                vehicles.push({ id: vId, customerId: custId, registrationNumber: reg, regNo: reg, make: v.make, model: (v.model || 'Vehicle').trim(), year: v.year, color: v.color });
+              }
             }
           }
           return {
@@ -644,12 +658,9 @@ export default {
                     DATE_FORMAT(j.expected_delivery_date, '%Y-%m-%d') as expectedDeliveryDate,
                     j.status, j.customer_complaint as customerComplaint, j.vehicle_condition as vehicleCondition,
                     j.assigned_to as assignedTo, j.notes,
-                    j.quotation_id as quotationId, q.quotation_number as quotationNumber,
-                    j.invoice_id as invoiceId, i.invoice_number as invoiceNumber,
+                    j.quotation_id as quotationId, j.invoice_id as invoiceId,
                     j.created_at as createdAt, j.updated_at as updatedAt
              FROM job_cards j
-             LEFT JOIN quotations q ON j.quotation_id = q.id
-             LEFT JOIN invoices i ON j.invoice_id = i.id
              ORDER BY j.created_at DESC`
           );
           const [items] = await conn.query('SELECT id, job_card_id as jobCardId, service_name as serviceName, description FROM job_card_items');
@@ -682,12 +693,9 @@ export default {
                     DATE_FORMAT(j.expected_delivery_date, '%Y-%m-%d') as expectedDeliveryDate,
                     j.status, j.customer_complaint as customerComplaint, j.vehicle_condition as vehicleCondition,
                     j.assigned_to as assignedTo, j.notes,
-                    j.quotation_id as quotationId, q.quotation_number as quotationNumber,
-                    j.invoice_id as invoiceId, i.invoice_number as invoiceNumber,
+                    j.quotation_id as quotationId, j.invoice_id as invoiceId,
                     j.created_at as createdAt, j.updated_at as updatedAt
              FROM job_cards j
-             LEFT JOIN quotations q ON j.quotation_id = q.id
-             LEFT JOIN invoices i ON j.invoice_id = i.id
              WHERE j.id = ? OR j.job_card_number = ?`,
             [id, id]
           );
@@ -943,14 +951,14 @@ export default {
     if (path === '/api/invoices' && method === 'GET') {
       try {
         const invoices = await withDb(env, async (conn) => {
-          const [invRows] = await conn.query('SELECT * FROM invoices ORDER BY invoice_date DESC, created_at DESC');
-          const [itemRows] = await conn.query('SELECT * FROM invoice_items');
+          const [invRows] = await conn.query('SELECT * FROM invoices ORDER BY date DESC, created_at DESC');
+          const [itemRows] = await conn.query('SELECT * FROM invoice_items ORDER BY sort_order ASC');
           const [pmtRows] = await conn.query('SELECT * FROM payments ORDER BY payment_date ASC');
 
           return invRows.map((inv) => {
             const items = itemRows.filter((i) => i.invoice_id === inv.id).map((i) => ({
               id: i.id,
-              serviceName: i.service_name,
+              serviceName: i.description || 'Service',
               description: i.description,
               quantity: Number(i.quantity),
               unitPrice: Number(i.unit_price),
@@ -962,7 +970,7 @@ export default {
               method: p.payment_method === 'bkash' ? 'bKash' : p.payment_method === 'bank' ? 'Bank' : 'Cash',
               date: p.payment_date,
               reference: p.reference,
-              notes: p.notes,
+              notes: p.note,
             }));
 
             return {
@@ -976,13 +984,13 @@ export default {
               vehicleId: inv.vehicle_id,
               vehicleRegistration: inv.vehicle_registration,
               vehicleModel: inv.vehicle_model,
-              date: inv.invoice_date,
+              date: inv.date,
               items,
               subtotal: Number(inv.subtotal),
               discount: Number(inv.discount),
-              grandTotal: Number(inv.total),
-              paid: Number(inv.paid_amount),
-              due: Number(inv.due_amount),
+              grandTotal: Number(inv.grand_total),
+              paid: Number(inv.paid),
+              due: Number(inv.due),
               status: inv.status === 'paid' ? 'Paid' : inv.status === 'partial' ? 'Partial' : 'Due',
               paymentMethod: inv.payment_method === 'bkash' ? 'bKash' : inv.payment_method === 'bank' ? 'Bank' : 'Cash',
               payments,
@@ -1004,7 +1012,7 @@ export default {
           const [invRows] = await conn.query('SELECT * FROM invoices WHERE id = ?', [id]);
           if (invRows.length === 0) return null;
           const inv = invRows[0];
-          const [items] = await conn.query('SELECT * FROM invoice_items WHERE invoice_id = ?', [id]);
+          const [items] = await conn.query('SELECT * FROM invoice_items WHERE invoice_id = ? ORDER BY sort_order ASC', [id]);
           const [payments] = await conn.query('SELECT * FROM payments WHERE invoice_id = ? ORDER BY payment_date ASC', [id]);
 
           return {
@@ -1015,17 +1023,17 @@ export default {
             customerPhone: inv.customer_phone,
             vehicleRegistration: inv.vehicle_registration,
             vehicleModel: inv.vehicle_model,
-            date: inv.invoice_date,
+            date: inv.date,
             subtotal: Number(inv.subtotal),
             discount: Number(inv.discount),
-            grandTotal: Number(inv.total),
-            paid: Number(inv.paid_amount),
-            due: Number(inv.due_amount),
+            grandTotal: Number(inv.grand_total),
+            paid: Number(inv.paid),
+            due: Number(inv.due),
             status: inv.status === 'paid' ? 'Paid' : inv.status === 'partial' ? 'Partial' : 'Due',
             paymentMethod: inv.payment_method,
             items: items.map((i) => ({
               id: i.id,
-              serviceName: i.service_name,
+              serviceName: i.description || 'Service',
               description: i.description,
               quantity: Number(i.quantity),
               unitPrice: Number(i.unit_price),
@@ -1065,8 +1073,8 @@ export default {
           const pMethod = (body.paymentMethod || 'cash').toLowerCase();
 
           await conn.query(
-            `INSERT INTO invoices (id, invoice_number, quotation_id, job_card_id, customer_id, vehicle_id, customer_name, customer_phone, vehicle_registration, vehicle_model, invoice_date, subtotal, discount, total, paid_amount, due_amount, status, payment_method, notes, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+            `INSERT INTO invoices (id, invoice_number, quotation_id, job_card_id, customer_id, vehicle_id, customer_name, customer_phone, vehicle_registration, vehicle_model, vehicle_color, date, subtotal, discount, grand_total, paid, due, status, payment_method, notes, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
             [
               invId,
               invoiceNumber,
@@ -1078,6 +1086,7 @@ export default {
               body.customerPhone.trim(),
               body.vehicleRegistration.trim(),
               body.vehicleModel.trim(),
+              body.vehicleColor || null,
               body.date || new Date().toISOString().split('T')[0],
               body.subtotal || 0,
               body.discount || 0,
@@ -1094,9 +1103,9 @@ export default {
             for (let i = 0; i < body.items.length; i++) {
               const itm = body.items[i];
               await conn.query(
-                `INSERT INTO invoice_items (id, invoice_id, service_name, description, quantity, unit_price, total, created_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
-                [`ii-${Date.now()}-${i}`, invId, itm.serviceName || itm.description || 'Service', itm.description || null, itm.quantity || 1, itm.unitPrice || 0, itm.total || 0]
+                `INSERT INTO invoice_items (id, invoice_id, item_type, description, quantity, unit_price, total, sort_order, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+                [`ii-${Date.now()}-${i}`, invId, itm.type || 'service', itm.description || itm.serviceName || 'Service', itm.quantity || 1, itm.unitPrice || 0, itm.total || 0, i]
               );
             }
           }
@@ -1104,7 +1113,7 @@ export default {
           if (paid > 0) {
             const pmtId = `pmt-${Date.now()}`;
             await conn.query(
-              `INSERT INTO payments (id, invoice_id, amount, payment_method, payment_date, reference, notes, created_at)
+              `INSERT INTO payments (id, invoice_id, amount, payment_method, payment_date, reference, note, created_at)
                VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
               [pmtId, invId, paid, pMethod, body.date || new Date().toISOString().split('T')[0], invoiceNumber, 'Initial Payment']
             );
@@ -1118,38 +1127,6 @@ export default {
           return { id: invId, invoiceNumber, ...body, grandTotal, paid, due, status };
         });
         return jsonResponse(created, 201, corsHeaders);
-      } catch (err) {
-        return jsonResponse({ error: err.message }, 500, corsHeaders);
-      }
-    }
-
-    if (path.match(/^\/api\/invoices\/[^/]+\/payments$/) && method === 'POST') {
-      try {
-        const id = path.split('/')[3];
-        const body = await request.json();
-        const result = await withTransaction(env, async (conn) => {
-          const [invRows] = await conn.query('SELECT * FROM invoices WHERE id = ? FOR UPDATE', [id]);
-          if (invRows.length === 0) throw new Error('Invoice not found');
-          const inv = invRows[0];
-          const paymentAmount = Number(body.amount) || 0;
-          const newPaid = Number(inv.paid_amount) + paymentAmount;
-          const newDue = Math.max(0, Number(inv.total) - newPaid);
-          const newStatus = newDue === 0 ? 'paid' : 'partial';
-          const pMethod = (body.method || body.paymentMethod || 'cash').toLowerCase();
-
-          await conn.query('UPDATE invoices SET paid_amount = ?, due_amount = ?, status = ?, updated_at = NOW() WHERE id = ?', [newPaid, newDue, newStatus, id]);
-          const pmtId = `pmt-${Date.now()}`;
-          await conn.query(
-            'INSERT INTO payments (id, invoice_id, amount, payment_method, payment_date, reference, notes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())',
-            [pmtId, id, paymentAmount, pMethod, body.date || new Date().toISOString().split('T')[0], body.reference || inv.invoice_number, body.notes || 'Due payment collection']
-          );
-          await conn.query(
-            'INSERT INTO financial_transactions (id, date, time, type, category, description, payment_method, amount, reference_type, reference_id, notes, created_at) VALUES (?, ?, ?, "INCOME", "Service Payment", ?, ?, ?, "invoice_payment", ?, ?, NOW())',
-            [`tx-${Date.now()}`, body.date || new Date().toISOString().split('T')[0], null, `Due payment for ${inv.invoice_number}`, pMethod, paymentAmount, inv.invoice_number, body.notes || null]
-          );
-          return { success: true, newPaid, newDue, newStatus };
-        });
-        return jsonResponse(result, 200, corsHeaders);
       } catch (err) {
         return jsonResponse({ error: err.message }, 500, corsHeaders);
       }
@@ -1182,7 +1159,7 @@ export default {
       try {
         const quotations = await withDb(env, async (conn) => {
           const [qtRows] = await conn.query('SELECT * FROM quotations ORDER BY quotation_date DESC, created_at DESC');
-          const [items] = await conn.query('SELECT * FROM quotation_items');
+          const [items] = await conn.query('SELECT * FROM quotation_items ORDER BY sort_order ASC');
           return qtRows.map((qt) => ({
             id: qt.id,
             quotationNumber: qt.quotation_number,
@@ -1201,7 +1178,7 @@ export default {
             convertedInvoiceId: qt.converted_invoice_id,
             items: items.filter((i) => i.quotation_id === qt.id).map((i) => ({
               id: i.id,
-              serviceName: i.service_name,
+              serviceName: i.description || 'Service',
               description: i.description,
               quantity: Number(i.quantity),
               unitPrice: Number(i.unit_price),
@@ -1215,91 +1192,23 @@ export default {
       }
     }
 
-    if (path === '/api/quotations' && method === 'POST') {
-      try {
-        const data = await request.json();
-        const qtId = `qt-${Date.now()}`;
-        const created = await withTransaction(env, async (conn) => {
-          const [setRows] = await conn.query('SELECT setting_value FROM settings WHERE setting_key = "quotation_prefix"');
-          const prefix = setRows[0]?.setting_value || 'QT-';
-          const [countRows] = await conn.query('SELECT COUNT(*) as count FROM quotations');
-          const nextSeq = (countRows[0]?.count || 0) + 1;
-          const qtNumber = `${prefix}${String(nextSeq).padStart(4, '0')}`;
-
-          await conn.query(
-            `INSERT INTO quotations (id, quotation_number, customer_id, customer_name, customer_phone, vehicle_registration, vehicle_model, quotation_date, valid_until, status, subtotal, discount, total, notes, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
-            [
-              qtId,
-              qtNumber,
-              data.customerId || null,
-              data.customerName || null,
-              data.customerPhone || null,
-              data.vehicleRegistration || null,
-              data.vehicleModel || null,
-              data.date || new Date().toISOString().split('T')[0],
-              data.validUntil || new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
-              (data.status || 'draft').toLowerCase(),
-              data.subtotal || 0,
-              data.discount || 0,
-              data.total || 0,
-              data.notes || null,
-            ]
-          );
-
-          if (Array.isArray(data.items)) {
-            for (let i = 0; i < data.items.length; i++) {
-              const item = data.items[i];
-              await conn.query(
-                `INSERT INTO quotation_items (id, quotation_id, service_name, description, quantity, unit_price, total, created_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
-                [`qti-${Date.now()}-${i}`, qtId, item.serviceName || item.description || 'Service', item.description || null, item.quantity || 1, item.unitPrice || 0, item.total || 0]
-              );
-            }
-          }
-
-          return { ...data, id: qtId, quotationNumber: qtNumber };
-        });
-
-        return jsonResponse(created, 201, corsHeaders);
-      } catch (err) {
-        return jsonResponse({ error: err.message }, 500, corsHeaders);
-      }
-    }
-
-    if (path.match(/^\/api\/quotations\/[^/]+$/) && method === 'DELETE') {
-      const user = getUser(request, env);
-      if (user && user.role === 'staff') {
-        return jsonResponse({ error: 'Staff users are not permitted to delete quotations.' }, 403, corsHeaders);
-      }
-      try {
-        const id = path.split('/')[3];
-        await withDb(env, async (conn) => {
-          await conn.query('DELETE FROM quotations WHERE id = ?', [id]);
-        });
-        return jsonResponse({ success: true }, 200, corsHeaders);
-      } catch (err) {
-        return jsonResponse({ error: err.message }, 500, corsHeaders);
-      }
-    }
-
     // ----------------------------------------------------
     // EXPENSES
     // ----------------------------------------------------
     if (path === '/api/expenses' && method === 'GET') {
       try {
         const expenses = await withDb(env, async (conn) => {
-          const [rows] = await conn.query('SELECT * FROM expenses ORDER BY expense_date DESC, created_at DESC');
+          const [rows] = await conn.query('SELECT * FROM expenses ORDER BY date DESC, created_at DESC');
           return rows.map((r) => ({
             id: r.id,
-            date: r.expense_date,
-            time: r.expense_time,
+            date: r.date,
+            time: r.time,
             category: r.category_name,
             description: r.description,
             paymentMethod: r.payment_method === 'bkash' ? 'bKash' : r.payment_method === 'bank' ? 'Bank' : 'Cash',
             amount: Number(r.amount),
             recipient: r.recipient,
-            note: r.notes,
+            note: r.note,
             createdAt: r.created_at,
           }));
         });
@@ -1316,79 +1225,6 @@ export default {
           return rows.map((r) => r.name);
         });
         return jsonResponse(cats, 200, corsHeaders);
-      } catch (err) {
-        return jsonResponse({ error: err.message }, 500, corsHeaders);
-      }
-    }
-
-    if (path === '/api/expenses/categories' && method === 'POST') {
-      try {
-        const { name } = await request.json();
-        if (!name) return jsonResponse({ error: 'Category name is required' }, 400, corsHeaders);
-        const categories = await withDb(env, async (conn) => {
-          const id = `exp_cat_${Date.now()}`;
-          await conn.query('INSERT IGNORE INTO expense_categories (id, name, status) VALUES (?, ?, "active")', [id, name.trim()]);
-          const [rows] = await conn.query('SELECT name FROM expense_categories WHERE status = "active" ORDER BY name ASC');
-          return rows.map((r) => r.name);
-        });
-        return jsonResponse(categories, 200, corsHeaders);
-      } catch (err) {
-        return jsonResponse({ error: err.message }, 500, corsHeaders);
-      }
-    }
-
-    if (path.startsWith('/api/expenses/categories/') && method === 'DELETE') {
-      const user = getUser(request, env);
-      if (user && user.role === 'staff') {
-        return jsonResponse({ error: 'Staff users are not permitted to delete expense categories.' }, 403, corsHeaders);
-      }
-      try {
-        const name = decodeURIComponent(path.replace('/api/expenses/categories/', ''));
-        const categories = await withDb(env, async (conn) => {
-          await conn.query('DELETE FROM expense_categories WHERE name = ?', [name]);
-          const [rows] = await conn.query('SELECT name FROM expense_categories WHERE status = "active" ORDER BY name ASC');
-          return rows.map((r) => r.name);
-        });
-        return jsonResponse(categories, 200, corsHeaders);
-      } catch (err) {
-        return jsonResponse({ error: err.message }, 500, corsHeaders);
-      }
-    }
-
-    if (path === '/api/expenses' && method === 'POST') {
-      try {
-        const body = await request.json();
-        const created = await withTransaction(env, async (conn) => {
-          const id = `exp-${Date.now()}`;
-          const pMethod = (body.paymentMethod || 'cash').toLowerCase();
-          await conn.query(
-            'INSERT INTO expenses (id, expense_date, expense_time, category_name, description, payment_method, amount, recipient, notes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())',
-            [id, body.date, body.time || null, body.category, body.description, pMethod, body.amount, body.recipient || null, body.note || null]
-          );
-          await conn.query(
-            'INSERT INTO financial_transactions (id, date, time, type, category, description, payment_method, amount, reference_type, reference_id, notes, created_at) VALUES (?, ?, ?, "EXPENSE", ?, ?, ?, ?, "expense", ?, ?, NOW())',
-            [`tx-exp-${Date.now()}`, body.date, body.time || null, body.category, body.description, pMethod, body.amount, id, body.note || null]
-          );
-          return { id, ...body };
-        });
-        return jsonResponse(created, 201, corsHeaders);
-      } catch (err) {
-        return jsonResponse({ error: err.message }, 500, corsHeaders);
-      }
-    }
-
-    if (path.match(/^\/api\/expenses\/[^/]+$/) && method === 'DELETE') {
-      const user = getUser(request, env);
-      if (user && user.role === 'staff') {
-        return jsonResponse({ error: 'Staff users are not permitted to delete expenses.' }, 403, corsHeaders);
-      }
-      try {
-        const id = path.split('/')[3];
-        await withTransaction(env, async (conn) => {
-          await conn.query('DELETE FROM expenses WHERE id = ?', [id]);
-          await conn.query('DELETE FROM financial_transactions WHERE reference_type = "expense" AND reference_id = ?', [id]);
-        });
-        return jsonResponse({ success: true }, 200, corsHeaders);
       } catch (err) {
         return jsonResponse({ error: err.message }, 500, corsHeaders);
       }
@@ -1438,40 +1274,6 @@ export default {
           }));
         });
         return jsonResponse(cashIn, 200, corsHeaders);
-      } catch (err) {
-        return jsonResponse({ error: err.message }, 500, corsHeaders);
-      }
-    }
-
-    if (path === '/api/transactions/cash-in' && method === 'POST') {
-      try {
-        const body = await request.json();
-        const created = await withTransaction(env, async (conn) => {
-          const txId = `tx-${Date.now()}`;
-          const pMethod = (body.paymentMethod || 'cash').toLowerCase();
-          await conn.query(
-            'INSERT INTO financial_transactions (id, date, time, type, category, description, payment_method, amount, reference_type, reference_id, notes, created_at) VALUES (?, ?, ?, "INCOME", ?, ?, ?, ?, "cash_in", ?, ?, NOW())',
-            [txId, body.date, body.time || null, body.type || 'Other Income', body.description || `${body.type} Inflow`, pMethod, body.amount, body.reference || null, body.note || null]
-          );
-          return { id: txId, ...body };
-        });
-        return jsonResponse(created, 201, corsHeaders);
-      } catch (err) {
-        return jsonResponse({ error: err.message }, 500, corsHeaders);
-      }
-    }
-
-    if (path.match(/^\/api\/transactions\/cash-in\/[^/]+$/) && method === 'DELETE') {
-      const user = getUser(request, env);
-      if (user && user.role === 'staff') {
-        return jsonResponse({ error: 'Staff users are not permitted to delete cash-in transactions.' }, 403, corsHeaders);
-      }
-      try {
-        const id = path.split('/')[4];
-        await withDb(env, async (conn) => {
-          await conn.query('DELETE FROM financial_transactions WHERE id = ?', [id]);
-        });
-        return jsonResponse({ success: true }, 200, corsHeaders);
       } catch (err) {
         return jsonResponse({ error: err.message }, 500, corsHeaders);
       }

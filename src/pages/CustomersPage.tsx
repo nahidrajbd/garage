@@ -61,17 +61,19 @@ export const CustomersPage: React.FC = () => {
   }, [refreshTrigger]);
 
   const filteredCustomers = useMemo(() => {
-    const q = search.toLowerCase();
+    const q = search.toLowerCase().trim();
+    if (!Array.isArray(customers)) return [];
+    if (!q) return customers;
     return customers.filter(c => {
-      return (
-        c.name.toLowerCase().includes(q) ||
-        c.phone.toLowerCase().includes(q) ||
-        (c.address && c.address.toLowerCase().includes(q)) ||
-        c.vehicles.some(v => 
-          v.registrationNumber.toLowerCase().includes(q) ||
-          v.model.toLowerCase().includes(q)
-        )
-      );
+      const nameMatch = c.name ? c.name.toLowerCase().includes(q) : false;
+      const phoneMatch = c.phone ? c.phone.toLowerCase().includes(q) : false;
+      const addressMatch = c.address ? c.address.toLowerCase().includes(q) : false;
+      const vehicleMatch = Array.isArray(c.vehicles) && c.vehicles.some(v => {
+        const reg = (v.registrationNumber || (v as any).regNo || '').toLowerCase();
+        const model = (v.model || '').toLowerCase();
+        return reg.includes(q) || model.includes(q);
+      });
+      return nameMatch || phoneMatch || addressMatch || vehicleMatch;
     });
   }, [customers, search]);
 
@@ -218,8 +220,8 @@ export const CustomersPage: React.FC = () => {
                       <td className="py-3.5 px-4">
                         {primaryVehicle ? (
                           <div>
-                            <div className="font-medium text-gray-800">{primaryVehicle.model}</div>
-                            <div className="text-[11px] text-gray-500 font-mono">{primaryVehicle.registrationNumber}</div>
+                            <div className="font-medium text-gray-800">{primaryVehicle.model || 'Vehicle'}</div>
+                            <div className="text-[11px] text-gray-500 font-mono">{primaryVehicle.registrationNumber || (primaryVehicle as any).regNo || 'No Reg'}</div>
                           </div>
                         ) : (
                           <span className="text-gray-400 italic text-xs">No vehicle added</span>
