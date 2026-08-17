@@ -1,0 +1,8 @@
+name = "nextgarage"
+compatibility_date = "2024-09-23"
+
+# Cloudflare Pages / Workers static assets configuration
+pages_build_output_dir = "./dist"
+
+[site]
+bucket = "./dist"
