@@ -15,7 +15,7 @@ router.get('/', async (req, res) => {
         COALESCE(SUM(CASE WHEN type = 'INCOME' THEN amount ELSE 0 END), 0) as todayCashIn,
         COALESCE(SUM(CASE WHEN type = 'EXPENSE' THEN amount ELSE 0 END), 0) as todayCashOut
        FROM financial_transactions
-       WHERE date = ?`,
+       WHERE DATE_FORMAT(date, '%Y-%m-%d') = ?`,
       [todayStr]
     );
 
@@ -25,8 +25,8 @@ router.get('/', async (req, res) => {
         COALESCE(SUM(CASE WHEN type = 'INCOME' THEN amount ELSE 0 END), 0) as monthIncome,
         COALESCE(SUM(CASE WHEN type = 'EXPENSE' THEN amount ELSE 0 END), 0) as monthExpenses
        FROM financial_transactions
-       WHERE date LIKE ?`,
-      [`${monthPrefix}%`]
+       WHERE DATE_FORMAT(date, '%Y-%m') = ?`,
+      [monthPrefix]
     );
 
     // Total Customers
@@ -44,9 +44,24 @@ router.get('/', async (req, res) => {
     const [jcWaiting] = await pool.query(`SELECT COUNT(*) as total FROM job_cards WHERE status = 'waiting'`);
     const [jcProgress] = await pool.query(`SELECT COUNT(*) as total FROM job_cards WHERE status = 'in_progress'`);
     const [jcCompletedToday] = await pool.query(
-      `SELECT COUNT(*) as total FROM job_cards WHERE status IN ('completed', 'delivered') AND date = ?`,
+      `SELECT COUNT(*) as total FROM job_cards WHERE status IN ('completed', 'delivered') AND DATE_FORMAT(date, '%Y-%m-%d') = ?`,
       [todayStr]
     );
+
+    // Overall Financials
+    const [finRows] = await pool.query(`
+      SELECT 
+        COALESCE(SUM(CASE WHEN type = 'INCOME' THEN amount ELSE 0 END), 0) as totalIncome,
+        COALESCE(SUM(CASE WHEN type = 'EXPENSE' THEN amount ELSE 0 END), 0) as totalExpense
+      FROM financial_transactions
+    `);
+    const [invSummary] = await pool.query(`
+      SELECT 
+        COALESCE(SUM(grand_total), 0) as totalBilled,
+        COALESCE(SUM(paid), 0) as totalPaid,
+        COALESCE(SUM(due), 0) as totalDue
+      FROM invoices
+    `);
 
     const todayCashIn = Number(todayCashRows[0].todayCashIn) || 0;
     const todayCashOut = Number(todayCashRows[0].todayCashOut) || 0;
@@ -61,6 +76,9 @@ router.get('/', async (req, res) => {
     const activeJobCardsCount = waitingJobCardsCount + inProgressJobCardsCount;
     const completedTodayJobCardsCount = Number(jcCompletedToday[0].total) || 0;
 
+    const tIncome = Number(finRows[0]?.totalIncome) || 0;
+    const tExpense = Number(finRows[0]?.totalExpense) || 0;
+
     res.json({
       todayCashIn,
       todayCashOut,
@@ -70,11 +88,18 @@ router.get('/', async (req, res) => {
       monthNet,
       totalCustomers: Number(custRows[0].total) || 0,
       totalActiveInvoices: Number(invRows[0].total) || 0,
+      totalInvoices: Number(invRows[0].total) || 0,
       pendingQuotationsCount: Number(quotRows[0].total) || 0,
       activeJobCardsCount,
       waitingJobCardsCount,
       inProgressJobCardsCount,
-      completedTodayJobCardsCount
+      completedTodayJobCardsCount,
+      totalBilled: Number(invSummary[0]?.totalBilled) || 0,
+      totalPaid: Number(invSummary[0]?.totalPaid) || 0,
+      totalDue: Number(invSummary[0]?.totalDue) || 0,
+      totalIncome: tIncome,
+      totalExpense: tExpense,
+      netProfit: tIncome - tExpense
     });
   } catch (error) {
     console.error('Error fetching metrics:', error);

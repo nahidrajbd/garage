@@ -4,7 +4,8 @@ import { useApp } from '../../context/AppContext';
 import { api } from '../../services/api';
 import { PaymentMethod } from '../../types';
 import { formatBDT } from '../../utils/formatters';
-import { CheckCircle2, User, Car } from 'lucide-react';
+import { CheckCircle2, User, Car, QrCode } from 'lucide-react';
+import banglaQrImg from '../../assets/bangla-qr.jpg';
 
 export const RecordPaymentModal: React.FC = () => {
   const { paymentModalInvoice, closePaymentModal, showToast, triggerRefresh } = useApp();
@@ -137,6 +138,26 @@ export const RecordPaymentModal: React.FC = () => {
               </button>
             ))}
           </div>
+
+          {/* Quick QR display for digital payments */}
+          {paymentMethod !== 'Cash' && (
+            <div className="mt-3 p-3 bg-emerald-50/70 border border-emerald-200 rounded-xl flex items-center gap-3">
+              <img
+                src={banglaQrImg}
+                alt="Bangla QR"
+                className="w-16 h-16 object-contain rounded bg-white p-1 border border-emerald-200 shrink-0"
+              />
+              <div className="text-xs">
+                <p className="font-bold text-emerald-900 flex items-center gap-1">
+                  <QrCode className="w-3.5 h-3.5 text-emerald-700" />
+                  <span>Scan to Pay via Bangla QR</span>
+                </p>
+                <p className="text-[11px] text-emerald-700 mt-0.5">
+                  Customer can scan using bKash, Nagad, or any bank app.
+                </p>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Note */}

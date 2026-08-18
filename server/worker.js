@@ -232,9 +232,40 @@ export default {
     if (path === '/api/metrics' && method === 'GET') {
       try {
         const metrics = await withDb(env, async (conn) => {
-          const [invCount] = await conn.query('SELECT COUNT(*) as c FROM invoices');
+          const todayStr = new Date().toISOString().split('T')[0];
+          const monthPrefix = todayStr.substring(0, 7); // 'YYYY-MM'
+
+          const [todayCashRows] = await conn.query(
+            `SELECT 
+              COALESCE(SUM(CASE WHEN type = 'INCOME' THEN amount ELSE 0 END), 0) as todayCashIn,
+              COALESCE(SUM(CASE WHEN type = 'EXPENSE' THEN amount ELSE 0 END), 0) as todayCashOut
+             FROM financial_transactions
+             WHERE DATE_FORMAT(date, '%Y-%m-%d') = ?`,
+            [todayStr]
+          );
+
+          const [monthCashRows] = await conn.query(
+            `SELECT 
+              COALESCE(SUM(CASE WHEN type = 'INCOME' THEN amount ELSE 0 END), 0) as monthIncome,
+              COALESCE(SUM(CASE WHEN type = 'EXPENSE' THEN amount ELSE 0 END), 0) as monthExpenses
+             FROM financial_transactions
+             WHERE DATE_FORMAT(date, '%Y-%m') = ?`,
+            [monthPrefix]
+          );
+
           const [custCount] = await conn.query('SELECT COUNT(*) as c FROM customers WHERE status = "active"');
-          const [jcActive] = await conn.query('SELECT COUNT(*) as c FROM job_cards WHERE status IN ("waiting", "in_progress")');
+          const [invCount] = await conn.query('SELECT COUNT(*) as c FROM invoices');
+          const [quotRows] = await conn.query(
+            `SELECT COUNT(*) as c FROM quotations WHERE status IN ('draft', 'sent', 'accepted')`
+          );
+
+          const [jcWaiting] = await conn.query(`SELECT COUNT(*) as c FROM job_cards WHERE status = 'waiting'`);
+          const [jcProgress] = await conn.query(`SELECT COUNT(*) as c FROM job_cards WHERE status = 'in_progress'`);
+          const [jcCompletedToday] = await conn.query(
+            `SELECT COUNT(*) as c FROM job_cards WHERE status IN ('completed', 'delivered') AND DATE_FORMAT(date, '%Y-%m-%d') = ?`,
+            [todayStr]
+          );
+
           const [finRows] = await conn.query(`
             SELECT 
               COALESCE(SUM(CASE WHEN type = 'INCOME' THEN amount ELSE 0 END), 0) as totalIncome,
@@ -257,13 +288,37 @@ export default {
             FROM job_cards ORDER BY date DESC, created_at DESC LIMIT 5
           `);
 
+          const todayCashIn = Number(todayCashRows[0]?.todayCashIn) || 0;
+          const todayCashOut = Number(todayCashRows[0]?.todayCashOut) || 0;
+          const todayNet = todayCashIn - todayCashOut;
+
+          const monthIncome = Number(monthCashRows[0]?.monthIncome) || 0;
+          const monthExpenses = Number(monthCashRows[0]?.monthExpenses) || 0;
+          const monthNet = monthIncome - monthExpenses;
+
+          const waitingJobCardsCount = Number(jcWaiting[0]?.c) || 0;
+          const inProgressJobCardsCount = Number(jcProgress[0]?.c) || 0;
+          const activeJobCardsCount = waitingJobCardsCount + inProgressJobCardsCount;
+          const completedTodayJobCardsCount = Number(jcCompletedToday[0]?.c) || 0;
+
           const tIncome = Number(finRows[0]?.totalIncome) || 0;
           const tExpense = Number(finRows[0]?.totalExpense) || 0;
 
           return {
+            todayCashIn,
+            todayCashOut,
+            todayNet,
+            monthIncome,
+            monthExpenses,
+            monthNet,
             totalCustomers: custCount[0]?.c || 0,
-            activeJobCards: jcActive[0]?.c || 0,
+            totalActiveInvoices: invCount[0]?.c || 0,
             totalInvoices: invCount[0]?.c || 0,
+            pendingQuotationsCount: Number(quotRows[0]?.c) || 0,
+            activeJobCardsCount,
+            waitingJobCardsCount,
+            inProgressJobCardsCount,
+            completedTodayJobCardsCount,
             totalBilled: Number(invSummary[0]?.totalBilled) || 0,
             totalPaid: Number(invSummary[0]?.totalPaid) || 0,
             totalDue: Number(invSummary[0]?.totalDue) || 0,
@@ -1132,6 +1187,52 @@ export default {
       }
     }
 
+    if (path.match(/^\/api\/invoices\/[^/]+\/payments$/) && method === 'POST') {
+      try {
+        const id = path.split('/')[3];
+        const body = await request.json();
+        const paymentAmount = Number(body.amount);
+        if (isNaN(paymentAmount) || paymentAmount <= 0) {
+          return jsonResponse({ error: 'Valid payment amount is required' }, 400, corsHeaders);
+        }
+
+        const updated = await withTransaction(env, async (conn) => {
+          const [invRows] = await conn.query('SELECT * FROM invoices WHERE id = ? OR invoice_number = ?', [id, id]);
+          if (invRows.length === 0) throw new Error('Invoice not found');
+          const inv = invRows[0];
+
+          const currentPaid = Number(inv.paid) || 0;
+          const grandTotal = Number(inv.grand_total) || 0;
+          const newPaid = Math.min(grandTotal, currentPaid + paymentAmount);
+          const newDue = Math.max(0, grandTotal - newPaid);
+          const newStatus = newDue === 0 ? 'paid' : 'partial';
+          const pMethod = (body.paymentMethod || 'cash').toLowerCase();
+          const today = new Date().toISOString().split('T')[0];
+          const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+          await conn.query('UPDATE invoices SET paid = ?, due = ?, status = ? WHERE id = ?', [newPaid, newDue, newStatus, inv.id]);
+
+          const paymentId = `pmt-${Date.now()}`;
+          await conn.query(
+            `INSERT INTO payments (id, invoice_id, amount, payment_method, payment_date, reference, note, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
+            [paymentId, inv.id, paymentAmount, pMethod, today, inv.invoice_number, body.note || `Due collection for invoice ${inv.invoice_number}`]
+          );
+
+          await conn.query(
+            `INSERT INTO financial_transactions (id, date, time, type, category, description, payment_method, amount, reference_type, reference_id, notes, created_at)
+             VALUES (?, ?, ?, 'INCOME', 'Service Payment', ?, ?, ?, 'invoice_payment', ?, ?, NOW())`,
+            [`tx-${Date.now()}`, today, timeStr, `Due Collection - ${inv.customer_name || 'Customer'} (${inv.vehicle_model || 'Vehicle'})`, pMethod, paymentAmount, inv.invoice_number, body.note || `Due payment collection for ${inv.invoice_number}`]
+          );
+
+          return { ...inv, paid: newPaid, due: newDue, status: statusMapToFrontend[newStatus] || 'Paid' };
+        });
+        return jsonResponse(updated, 200, corsHeaders);
+      } catch (err) {
+        return jsonResponse({ error: err.message }, 500, corsHeaders);
+      }
+    }
+
     if (path.match(/^\/api\/invoices\/[^/]+$/) && method === 'DELETE') {
       const user = getUser(request, env);
       if (user && user.role === 'staff') {
@@ -1236,19 +1337,31 @@ export default {
     if (path === '/api/transactions' && method === 'GET') {
       try {
         const txs = await withDb(env, async (conn) => {
-          const [rows] = await conn.query('SELECT * FROM financial_transactions ORDER BY date DESC, created_at DESC');
+          const [rows] = await conn.query(`
+            SELECT id, DATE_FORMAT(date, '%Y-%m-%d') as date,
+                   COALESCE(time, DATE_FORMAT(created_at, '%h:%i %p')) as time,
+                   CASE type WHEN 'INCOME' THEN 'IN' ELSE 'OUT' END as flow,
+                   category as type,
+                   description,
+                   reference_id as reference,
+                   payment_method as paymentMethod,
+                   amount,
+                   reference_id as sourceId,
+                   created_at
+            FROM financial_transactions
+            ORDER BY date DESC, created_at DESC
+          `);
           return rows.map((r) => ({
             id: r.id,
             date: r.date,
             time: r.time,
+            flow: r.flow,
             type: r.type,
-            category: r.category,
             description: r.description,
-            paymentMethod: r.payment_method === 'bkash' ? 'bKash' : r.payment_method === 'bank' ? 'Bank' : 'Cash',
-            amount: Number(r.amount),
-            referenceType: r.reference_type,
-            referenceId: r.reference_id,
-            notes: r.notes,
+            reference: r.reference,
+            paymentMethod: r.paymentMethod === 'bkash' ? 'bKash' : r.paymentMethod === 'bank' ? 'Bank' : 'Cash',
+            amount: Number(r.amount) || 0,
+            sourceId: r.sourceId,
           }));
         });
         return jsonResponse(txs, 200, corsHeaders);
@@ -1260,20 +1373,81 @@ export default {
     if (path === '/api/transactions/cash-in' && method === 'GET') {
       try {
         const cashIn = await withDb(env, async (conn) => {
-          const [rows] = await conn.query('SELECT * FROM financial_transactions WHERE type = "INCOME" ORDER BY date DESC, created_at DESC');
+          const [rows] = await conn.query(`
+            SELECT id, DATE_FORMAT(date, '%Y-%m-%d') as date,
+                   COALESCE(time, DATE_FORMAT(created_at, '%h:%i %p')) as time,
+                   category as type,
+                   description,
+                   reference_id as reference,
+                   payment_method as paymentMethod,
+                   amount,
+                   created_at as createdAt
+            FROM financial_transactions
+            WHERE type = 'INCOME'
+            ORDER BY date DESC, created_at DESC
+          `);
           return rows.map((r) => ({
             id: r.id,
             date: r.date,
             time: r.time,
-            type: r.category,
+            type: r.type,
             description: r.description,
-            reference: r.reference_id,
-            paymentMethod: r.payment_method === 'bkash' ? 'bKash' : r.payment_method === 'bank' ? 'Bank' : 'Cash',
-            amount: Number(r.amount),
-            note: r.notes,
+            reference: r.reference,
+            paymentMethod: r.paymentMethod === 'bkash' ? 'bKash' : r.paymentMethod === 'bank' ? 'Bank' : 'Cash',
+            amount: Number(r.amount) || 0,
+            createdAt: typeof r.createdAt === 'string' ? r.createdAt : new Date(r.createdAt).toISOString()
           }));
         });
         return jsonResponse(cashIn, 200, corsHeaders);
+      } catch (err) {
+        return jsonResponse({ error: err.message }, 500, corsHeaders);
+      }
+    }
+
+    if (path === '/api/transactions/cash-in' && method === 'POST') {
+      try {
+        const data = await request.json();
+        const txId = `cin-${Date.now()}`;
+        const date = data.date || new Date().toISOString().split('T')[0];
+        const time = data.time || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const pMethod = (data.paymentMethod || 'cash').toLowerCase();
+
+        const created = await withTransaction(env, async (conn) => {
+          await conn.query(
+            `INSERT INTO financial_transactions (
+              id, date, time, type, category, description, payment_method,
+              amount, reference_type, reference_id, notes, created_at
+            ) VALUES (?, ?, ?, 'INCOME', ?, ?, ?, ?, 'direct_cash_in', ?, ?, NOW())`,
+            [
+              txId,
+              date,
+              time,
+              data.type || 'Other Income',
+              data.description,
+              pMethod,
+              Number(data.amount) || 0,
+              data.reference || null,
+              data.note || null
+            ]
+          );
+
+          return {
+            id: txId,
+            date,
+            time,
+            type: data.type || 'Other Income',
+            description: data.description,
+            reference: data.reference,
+            paymentMethod: pMethod === 'bkash' ? 'bKash' : pMethod === 'bank' ? 'Bank' : 'Cash',
+            amount: Number(data.amount) || 0,
+            note: data.note,
+            customerName: data.customerName,
+            vehicleInfo: data.vehicleInfo,
+            createdAt: new Date().toISOString()
+          };
+        });
+
+        return jsonResponse(created, 201, corsHeaders);
       } catch (err) {
         return jsonResponse({ error: err.message }, 500, corsHeaders);
       }

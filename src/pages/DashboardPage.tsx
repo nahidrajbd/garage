@@ -117,7 +117,7 @@ export const DashboardPage: React.FC = () => {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard
           title="Today's Cash In"
-          value={formatBDT(metrics?.todayCashIn ?? 0)}
+          value={formatBDT(metrics?.todayCashIn ?? (metrics as any)?.totalIncome ?? 0)}
           subtitle="All incoming cash & online payments"
           icon={ArrowDownLeft}
           variant="success"
@@ -126,7 +126,7 @@ export const DashboardPage: React.FC = () => {
 
         <StatCard
           title="Today's Cash Out"
-          value={formatBDT(metrics?.todayCashOut ?? 0)}
+          value={formatBDT(metrics?.todayCashOut ?? (metrics as any)?.totalExpense ?? 0)}
           subtitle="Purchases, salaries & daily expenses"
           icon={ArrowUpRight}
           variant="danger"
@@ -135,7 +135,10 @@ export const DashboardPage: React.FC = () => {
 
         <StatCard
           title="Today's Net Cash"
-          value={formatBDT(metrics?.todayNet ?? 0)}
+          value={formatBDT(
+            metrics?.todayNet ?? 
+            ((metrics?.todayCashIn ?? (metrics as any)?.totalIncome ?? 0) - (metrics?.todayCashOut ?? (metrics as any)?.totalExpense ?? 0))
+          )}
           subtitle={
             (metrics?.todayNet ?? 0) >= 0 
               ? 'Positive daily cash balance' 
@@ -169,30 +172,33 @@ export const DashboardPage: React.FC = () => {
             <div className="p-3 bg-emerald-50/70 rounded-xl border border-emerald-100">
               <span className="text-[11px] font-semibold uppercase text-emerald-800 tracking-wider">Total Income</span>
               <p className="text-lg sm:text-xl font-extrabold text-emerald-700 font-heading mt-1">
-                {formatBDT(metrics?.monthIncome ?? 0)}
+                {formatBDT(metrics?.monthIncome ?? (metrics as any)?.totalIncome ?? 0)}
               </p>
             </div>
 
             <div className="p-3 bg-rose-50/70 rounded-xl border border-rose-100">
               <span className="text-[11px] font-semibold uppercase text-rose-800 tracking-wider">Total Expenses</span>
               <p className="text-lg sm:text-xl font-extrabold text-rose-700 font-heading mt-1">
-                {formatBDT(metrics?.monthExpenses ?? 0)}
+                {formatBDT(metrics?.monthExpenses ?? (metrics as any)?.totalExpense ?? 0)}
               </p>
             </div>
 
             <div className="p-3 bg-gray-50 rounded-xl border border-gray-200">
               <span className="text-[11px] font-semibold uppercase text-gray-700 tracking-wider">Net Cash Flow</span>
               <p className={`text-lg sm:text-xl font-extrabold font-heading mt-1 ${
-                (metrics?.monthNet ?? 0) >= 0 ? 'text-gray-900' : 'text-rose-600'
+                (metrics?.monthNet ?? ((metrics?.monthIncome ?? (metrics as any)?.totalIncome ?? 0) - (metrics?.monthExpenses ?? (metrics as any)?.totalExpense ?? 0))) >= 0 ? 'text-gray-900' : 'text-rose-600'
               }`}>
-                {formatBDT(metrics?.monthNet ?? 0)}
+                {formatBDT(
+                  metrics?.monthNet ?? 
+                  ((metrics?.monthIncome ?? (metrics as any)?.totalIncome ?? 0) - (metrics?.monthExpenses ?? (metrics as any)?.totalExpense ?? 0))
+                )}
               </p>
             </div>
           </div>
 
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500 pt-2 border-t border-gray-100">
             <span>Active Customers: <strong className="text-gray-900">{metrics?.totalCustomers ?? 0}</strong></span>
-            <span>Total Invoices: <strong className="text-gray-900">{metrics?.totalActiveInvoices ?? 0}</strong></span>
+            <span>Total Invoices: <strong className="text-gray-900">{metrics?.totalActiveInvoices ?? (metrics as any)?.totalInvoices ?? 0}</strong></span>
             <button
               type="button"
               onClick={() => navigate('/quotations')}
@@ -270,7 +276,8 @@ export const DashboardPage: React.FC = () => {
           ) : (
             <div className="divide-y divide-gray-100 mt-2">
               {recentTransactions.map(tx => {
-                const isIncoming = tx.flow === 'IN';
+                const isIncoming = tx.flow === 'IN' || (tx as any).type === 'INCOME' || (tx as any).category === 'Service Payment' || (tx as any).category === 'Other Income';
+                const txTypeLabel = tx.type === 'INCOME' ? 'Income' : tx.type === 'EXPENSE' ? 'Expense' : tx.type;
                 return (
                   <div key={tx.id} className="py-3 flex items-center justify-between gap-3 hover:bg-gray-50/70 px-2 rounded-xl transition-colors">
                     <div className="flex items-start gap-3 min-w-0">
@@ -288,9 +295,13 @@ export const DashboardPage: React.FC = () => {
                           {tx.description}
                         </p>
                         <div className="flex items-center gap-2 text-[11px] text-gray-500 mt-0.5">
-                          <span className="font-medium text-gray-700">{tx.type}</span>
-                          <span>•</span>
-                          <span>{tx.time}</span>
+                          <span className="font-medium text-gray-700">{txTypeLabel}</span>
+                          {tx.time && (
+                            <>
+                              <span>•</span>
+                              <span>{tx.time}</span>
+                            </>
+                          )}
                           <span>•</span>
                           <span className="bg-gray-100 px-1.5 py-0.2 rounded text-[10px]">{tx.paymentMethod}</span>
                         </div>

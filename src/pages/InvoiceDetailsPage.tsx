@@ -10,13 +10,15 @@ import {
   MapPin, 
   User, 
   Car,
-  Receipt
+  Receipt,
+  QrCode
 } from 'lucide-react';
 import { InvoiceStatusBadge, PaymentMethodBadge } from '../components/common/Badge';
 import { useApp } from '../context/AppContext';
 import { api } from '../services/api';
 import { Invoice, Settings } from '../types';
 import { formatBDT, formatDate } from '../utils/formatters';
+import banglaQrImg from '../assets/bangla-qr.jpg';
 
 export const InvoiceDetailsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -224,12 +226,41 @@ export const InvoiceDetailsPage: React.FC = () => {
 
         {/* Financial Summary & Breakdown */}
         <div className="flex flex-col sm:flex-row justify-between items-start gap-6 pt-4 border-t-2 border-gray-200">
-          {/* Notes & Payment Info */}
-          <div className="space-y-2 max-w-sm text-xs text-gray-600">
+          {/* Notes & Payment Info with Bangla QR Code */}
+          <div className="space-y-3 max-w-sm text-xs text-gray-600">
             <div className="flex items-center gap-2">
               <span className="font-semibold text-gray-700">Payment Method:</span>
               <PaymentMethodBadge method={invoice.paymentMethod} />
             </div>
+
+            {/* Bangla QR Scan & Pay Box */}
+            <div className="p-3 bg-white rounded-xl border-2 border-dashed border-gray-300 flex items-center gap-3.5 shadow-2xs">
+              <div className="bg-white p-1 rounded-lg border border-gray-200 shrink-0">
+                <img
+                  src={banglaQrImg}
+                  alt="Bangla QR - Scan and Pay"
+                  className="w-24 h-24 sm:w-28 sm:h-28 object-contain rounded"
+                />
+              </div>
+              <div className="space-y-1 min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <span className="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
+                  <p className="font-bold text-gray-900 text-xs font-heading tracking-tight flex items-center gap-1">
+                    <QrCode className="w-3.5 h-3.5 text-[#C1121F]" />
+                    <span>Scan & Pay (বাংলা QR)</span>
+                  </p>
+                </div>
+                <p className="text-[11px] text-gray-600 leading-snug">
+                  Scan with any Bank App, <strong className="text-gray-900">bKash, Nagad, Rocket</strong> or <strong className="text-gray-900">Upay</strong> to pay bill.
+                </p>
+                <div className="pt-0.5">
+                  <span className="inline-block bg-gray-100 text-gray-700 text-[10px] font-semibold px-2 py-0.5 rounded border border-gray-200">
+                    Universal Bangla QR
+                  </span>
+                </div>
+              </div>
+            </div>
+
             {invoice.notes && (
               <div className="p-2.5 bg-gray-50 rounded-lg border border-gray-200 text-gray-700">
                 <span className="font-semibold text-gray-800 block text-[11px]">Note / Remarks:</span>
