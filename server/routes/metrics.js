@@ -12,20 +12,20 @@ router.get('/', async (req, res) => {
     // Cash In & Out (Today)
     const [todayCashRows] = await pool.query(
       `SELECT 
-        COALESCE(SUM(CASE WHEN transaction_type = 'cash_in' THEN amount ELSE 0 END), 0) as todayCashIn,
-        COALESCE(SUM(CASE WHEN transaction_type = 'cash_out' THEN amount ELSE 0 END), 0) as todayCashOut
+        COALESCE(SUM(CASE WHEN type = 'INCOME' THEN amount ELSE 0 END), 0) as todayCashIn,
+        COALESCE(SUM(CASE WHEN type = 'EXPENSE' THEN amount ELSE 0 END), 0) as todayCashOut
        FROM financial_transactions
-       WHERE transaction_date = ?`,
+       WHERE date = ?`,
       [todayStr]
     );
 
     // Cash In & Out (This Month)
     const [monthCashRows] = await pool.query(
       `SELECT 
-        COALESCE(SUM(CASE WHEN transaction_type = 'cash_in' THEN amount ELSE 0 END), 0) as monthIncome,
-        COALESCE(SUM(CASE WHEN transaction_type = 'cash_out' THEN amount ELSE 0 END), 0) as monthExpenses
+        COALESCE(SUM(CASE WHEN type = 'INCOME' THEN amount ELSE 0 END), 0) as monthIncome,
+        COALESCE(SUM(CASE WHEN type = 'EXPENSE' THEN amount ELSE 0 END), 0) as monthExpenses
        FROM financial_transactions
-       WHERE transaction_date LIKE ?`,
+       WHERE date LIKE ?`,
       [`${monthPrefix}%`]
     );
 

@@ -17,6 +17,20 @@ const statusMapToDb = {
   'Paid': 'paid'
 };
 
+const formatPaymentMethod = (method) => {
+  const m = String(method || 'cash').toLowerCase();
+  if (m === 'bkash') return 'bKash';
+  if (m === 'bank') return 'Bank';
+  return 'Cash';
+};
+
+const normalizePaymentMethod = (method) => {
+  const m = String(method || 'cash').toLowerCase();
+  if (m === 'bkash') return 'bkash';
+  if (m === 'bank') return 'bank';
+  return 'cash';
+};
+
 // GET all Invoices
 router.get('/', async (req, res) => {
   try {
@@ -26,9 +40,9 @@ router.get('/', async (req, res) => {
               i.vehicle_registration as vehicleRegistration, i.vehicle_model as vehicleModel,
               i.job_card_id as jobCardId, jc.job_card_number as jobCardNumber,
               i.quotation_id as quotationId, q.quotation_number as quotationNumber,
-              DATE_FORMAT(i.invoice_date, '%Y-%m-%d') as date,
-              i.subtotal, i.discount, i.total as grandTotal,
-              i.paid_amount as paid, i.due_amount as due,
+              DATE_FORMAT(i.date, '%Y-%m-%d') as date,
+              i.subtotal, i.discount, i.grand_total as grandTotal,
+              i.paid, i.due,
               i.status, i.payment_method as paymentMethod, i.notes,
               i.created_at as createdAt, i.updated_at as updatedAt
        FROM invoices i
@@ -38,9 +52,9 @@ router.get('/', async (req, res) => {
     );
 
     const [items] = await pool.query(
-      `SELECT id, invoice_id as invoiceId, service_id as serviceId, service_name as serviceName,
+      `SELECT id, invoice_id as invoiceId, description as serviceName,
               description, quantity, unit_price as price, total
-       FROM invoice_items`
+       FROM invoice_items ORDER BY sort_order ASC, created_at ASC`
     );
 
     const itemMap = {};
@@ -48,8 +62,8 @@ router.get('/', async (req, res) => {
       if (!itemMap[item.invoiceId]) itemMap[item.invoiceId] = [];
       itemMap[item.invoiceId].push({
         id: item.id,
-        serviceId: item.serviceId,
-        serviceName: item.serviceName,
+        serviceName: item.serviceName || item.description || 'Service',
+        description: item.description,
         price: Number(item.price) || 0,
         quantity: Number(item.quantity) || 1
       });
@@ -58,6 +72,7 @@ router.get('/', async (req, res) => {
     const formatted = invoices.map(inv => ({
       ...inv,
       status: statusMapToFrontend[inv.status] || 'Due',
+      paymentMethod: formatPaymentMethod(inv.paymentMethod),
       subtotal: Number(inv.subtotal) || 0,
       discount: Number(inv.discount) || 0,
       grandTotal: Number(inv.grandTotal) || 0,
@@ -85,9 +100,9 @@ router.get('/:id', async (req, res) => {
               i.vehicle_registration as vehicleRegistration, i.vehicle_model as vehicleModel,
               i.job_card_id as jobCardId, jc.job_card_number as jobCardNumber,
               i.quotation_id as quotationId, q.quotation_number as quotationNumber,
-              DATE_FORMAT(i.invoice_date, '%Y-%m-%d') as date,
-              i.subtotal, i.discount, i.total as grandTotal,
-              i.paid_amount as paid, i.due_amount as due,
+              DATE_FORMAT(i.date, '%Y-%m-%d') as date,
+              i.subtotal, i.discount, i.grand_total as grandTotal,
+              i.paid, i.due,
               i.status, i.payment_method as paymentMethod, i.notes,
               i.created_at as createdAt, i.updated_at as updatedAt
        FROM invoices i
@@ -103,15 +118,16 @@ router.get('/:id', async (req, res) => {
 
     const inv = rows[0];
     const [items] = await pool.query(
-      `SELECT id, invoice_id as invoiceId, service_id as serviceId, service_name as serviceName,
+      `SELECT id, invoice_id as invoiceId, description as serviceName,
               description, quantity, unit_price as price, total
-       FROM invoice_items WHERE invoice_id = ?`,
+       FROM invoice_items WHERE invoice_id = ? ORDER BY sort_order ASC, created_at ASC`,
       [inv.id]
     );
 
     res.json({
       ...inv,
       status: statusMapToFrontend[inv.status] || 'Due',
+      paymentMethod: formatPaymentMethod(inv.paymentMethod),
       subtotal: Number(inv.subtotal) || 0,
       discount: Number(inv.discount) || 0,
       grandTotal: Number(inv.grandTotal) || 0,
@@ -119,8 +135,8 @@ router.get('/:id', async (req, res) => {
       due: Number(inv.due) || 0,
       items: items.map(it => ({
         id: it.id,
-        serviceId: it.serviceId,
-        serviceName: it.serviceName,
+        serviceName: it.serviceName || it.description || 'Service',
+        description: it.description,
         price: Number(it.price) || 0,
         quantity: Number(it.quantity) || 1
       })),
@@ -138,7 +154,10 @@ router.post('/', async (req, res) => {
   try {
     const data = req.body;
     const invId = `inv-${Date.now()}`;
-    const invoiceNumber = data.invoiceNumber;
+    const invoiceNumber = data.invoiceNumber || `INV-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`;
+    const invoiceDate = data.date || new Date().toISOString().split('T')[0];
+    const invoiceTime = new Date().toTimeString().split(' ')[0];
+    const pMethod = normalizePaymentMethod(data.paymentMethod);
 
     const result = await withTransaction(async (conn) => {
       let customerId = data.customerId;
@@ -192,9 +211,9 @@ router.post('/', async (req, res) => {
       await conn.query(
         `INSERT INTO invoices (
           id, invoice_number, customer_id, vehicle_id, customer_name, customer_phone,
-          vehicle_registration, vehicle_model, job_card_id, quotation_id, invoice_date,
-          subtotal, discount, total, paid_amount, due_amount, status, payment_method, notes, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+          vehicle_registration, vehicle_model, job_card_id, quotation_id, date, time,
+          subtotal, discount, grand_total, paid, due, status, payment_method, notes, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
         [
           invId,
           invoiceNumber,
@@ -206,14 +225,15 @@ router.post('/', async (req, res) => {
           data.vehicleModel || null,
           data.jobCardId || null,
           data.quotationId || null,
-          data.date || new Date().toISOString().split('T')[0],
+          invoiceDate,
+          invoiceTime,
           calculatedSubtotal,
           discount,
           grandTotal,
           paid,
           due,
           status,
-          data.paymentMethod || 'Cash',
+          pMethod,
           data.notes || null
         ]
       );
@@ -227,15 +247,17 @@ router.post('/', async (req, res) => {
           const qty = Number(item.quantity) || 1;
           const uPrice = Number(item.price) || 0;
           const tot = qty * uPrice;
+          const itemDesc = item.serviceName || item.description || 'Service';
+
           await conn.query(
-            `INSERT INTO invoice_items (id, invoice_id, service_id, service_name, quantity, unit_price, total, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
-            [itemId, invId, item.serviceId || null, item.serviceName, qty, uPrice, tot]
+            `INSERT INTO invoice_items (id, invoice_id, item_type, description, quantity, unit_price, total, sort_order, created_at)
+             VALUES (?, ?, 'service', ?, ?, ?, ?, ?, NOW())`,
+            [itemId, invId, itemDesc, qty, uPrice, tot, i]
           );
+
           createdItems.push({
             id: itemId,
-            serviceId: item.serviceId,
-            serviceName: item.serviceName,
+            serviceName: itemDesc,
             price: uPrice,
             quantity: qty
           });
@@ -245,28 +267,27 @@ router.post('/', async (req, res) => {
       // If initial payment > 0, record in payments and financial_transactions
       if (paid > 0) {
         const paymentId = `pmt-${Date.now()}`;
-        const pDate = data.date || new Date().toISOString().split('T')[0];
-        const pMethod = (data.paymentMethod || 'cash').toLowerCase();
 
         await conn.query(
-          `INSERT INTO payments (id, invoice_id, amount, payment_method, payment_date, reference, notes, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
-          [paymentId, invId, paid, pMethod, pDate, invoiceNumber, `Initial payment for ${invoiceNumber}`]
+          `INSERT INTO payments (id, invoice_id, amount, payment_method, payment_date, payment_time, reference, note, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+          [paymentId, invId, paid, pMethod, invoiceDate, invoiceTime, invoiceNumber, `Initial payment for ${invoiceNumber}`]
         );
 
         await conn.query(
           `INSERT INTO financial_transactions (
-            id, transaction_type, category, reference_type, reference_id, description,
-            amount, payment_method, transaction_date, transaction_time, created_at
-          ) VALUES (?, 'cash_in', 'Service Payment', 'invoice_payment', ?, ?, ?, ?, ?, ?, NOW())`,
+            id, date, time, type, category, description, payment_method,
+            amount, reference_type, reference_id, notes, created_at
+          ) VALUES (?, ?, ?, 'INCOME', 'Service Payment', ?, ?, ?, 'invoice_payment', ?, ?, NOW())`,
           [
             `tx-${Date.now()}`,
-            invoiceNumber,
+            invoiceDate,
+            invoiceTime,
             `Service Payment - ${data.vehicleModel || 'Vehicle'} (${data.customerName || 'Customer'})`,
-            paid,
             pMethod,
-            pDate,
-            new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            paid,
+            invoiceNumber,
+            `Initial payment received for invoice ${invoiceNumber}`
           ]
         );
       }
@@ -279,6 +300,8 @@ router.post('/', async (req, res) => {
       return {
         ...data,
         id: invId,
+        invoiceNumber,
+        date: invoiceDate,
         customerId,
         vehicleId,
         subtotal: calculatedSubtotal,
@@ -287,6 +310,7 @@ router.post('/', async (req, res) => {
         paid,
         due,
         status: statusMapToFrontend[status] || 'Due',
+        paymentMethod: formatPaymentMethod(pMethod),
         items: createdItems,
         createdAt: new Date().toISOString()
       };
@@ -317,59 +341,60 @@ router.post('/:id/payments', async (req, res) => {
       }
       const inv = invRows[0];
 
-      const currentPaid = Number(inv.paid_amount) || 0;
-      const grandTotal = Number(inv.total) || 0;
+      const currentPaid = Number(inv.paid) || 0;
+      const grandTotal = Number(inv.grand_total) || 0;
       const newPaid = Math.min(grandTotal, currentPaid + paymentAmount);
       const newDue = Math.max(0, grandTotal - newPaid);
       const newStatus = newDue === 0 ? 'paid' : 'partial';
 
       // Update invoice
       await conn.query(
-        `UPDATE invoices SET paid_amount = ?, due_amount = ?, status = ? WHERE id = ?`,
+        `UPDATE invoices SET paid = ?, due = ?, status = ? WHERE id = ?`,
         [newPaid, newDue, newStatus, inv.id]
       );
 
       // Insert payment record
       const paymentId = `pmt-${Date.now()}`;
-      const pMethod = (paymentMethod || 'cash').toLowerCase();
+      const pMethod = normalizePaymentMethod(paymentMethod);
       const today = new Date().toISOString().split('T')[0];
-      const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const timeStr = new Date().toTimeString().split(' ')[0];
 
       await conn.query(
-        `INSERT INTO payments (id, invoice_id, amount, payment_method, payment_date, reference, notes, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
-        [paymentId, inv.id, paymentAmount, pMethod, today, inv.invoice_number, note || `Due collection for invoice ${inv.invoice_number}`]
+        `INSERT INTO payments (id, invoice_id, amount, payment_method, payment_date, payment_time, reference, note, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+        [paymentId, inv.id, paymentAmount, pMethod, today, timeStr, inv.invoice_number, note || `Due collection for invoice ${inv.invoice_number}`]
       );
 
       // Insert exactly one financial transaction in ledger
       await conn.query(
         `INSERT INTO financial_transactions (
-          id, transaction_type, category, reference_type, reference_id, description,
-          amount, payment_method, transaction_date, transaction_time, created_at
-        ) VALUES (?, 'cash_in', 'Service Payment', 'invoice_payment', ?, ?, ?, ?, ?, ?, NOW())`,
+          id, date, time, type, category, description, payment_method,
+          amount, reference_type, reference_id, notes, created_at
+        ) VALUES (?, ?, ?, 'INCOME', 'Service Payment', ?, ?, ?, 'invoice_payment', ?, ?, NOW())`,
         [
           `tx-${Date.now()}`,
-          inv.invoice_number,
-          `Due Collection - ${inv.customer_name || 'Customer'} (${inv.vehicle_model || 'Vehicle'})`,
-          paymentAmount,
-          pMethod,
           today,
-          timeStr
+          timeStr,
+          `Due Collection - ${inv.customer_name || 'Customer'} (${inv.vehicle_model || 'Vehicle'})`,
+          pMethod,
+          paymentAmount,
+          inv.invoice_number,
+          note || `Due payment collection for ${inv.invoice_number}`
         ]
       );
 
       // Fetch items for full returned invoice
       const [items] = await conn.query(
-        `SELECT id, invoice_id as invoiceId, service_id as serviceId, service_name as serviceName,
-                quantity, unit_price as price, total
-         FROM invoice_items WHERE invoice_id = ?`,
+        `SELECT id, invoice_id as invoiceId, description as serviceName,
+                description, quantity, unit_price as price, total
+         FROM invoice_items WHERE invoice_id = ? ORDER BY sort_order ASC, created_at ASC`,
         [inv.id]
       );
 
       return {
         id: inv.id,
         invoiceNumber: inv.invoice_number,
-        date: typeof inv.invoice_date === 'string' ? inv.invoice_date : new Date(inv.invoice_date).toISOString().split('T')[0],
+        date: typeof inv.date === 'string' ? inv.date : new Date(inv.date).toISOString().split('T')[0],
         customerId: inv.customer_id,
         customerName: inv.customer_name,
         customerPhone: inv.customer_phone,
@@ -381,12 +406,12 @@ router.post('/:id/payments', async (req, res) => {
         paid: newPaid,
         due: newDue,
         status: statusMapToFrontend[newStatus] || 'Paid',
-        paymentMethod: inv.payment_method,
+        paymentMethod: formatPaymentMethod(inv.payment_method),
         notes: inv.notes,
         items: items.map(it => ({
           id: it.id,
-          serviceId: it.serviceId,
-          serviceName: it.serviceName,
+          serviceName: it.serviceName || it.description || 'Service',
+          description: it.description,
           price: Number(it.price) || 0,
           quantity: Number(it.quantity) || 1
         })),

@@ -4,28 +4,39 @@ import { optionalAuth } from '../middleware/auth.js';
 
 const router = express.Router();
 
+const formatPaymentMethod = (method) => {
+  const m = String(method || 'cash').toLowerCase();
+  if (m === 'bkash') return 'bKash';
+  if (m === 'bank') return 'Bank';
+  return 'Cash';
+};
+
+const normalizePaymentMethod = (method) => {
+  const m = String(method || 'cash').toLowerCase();
+  if (m === 'bkash') return 'bkash';
+  if (m === 'bank') return 'bank';
+  return 'cash';
+};
+
 // GET all Expenses
 router.get('/', async (req, res) => {
   try {
     const [expenses] = await pool.query(
-      `SELECT e.id, DATE_FORMAT(e.expense_date, '%Y-%m-%d') as date,
-              COALESCE(e.expense_time, DATE_FORMAT(e.created_at, '%h:%i %p')) as time,
+      `SELECT e.id, DATE_FORMAT(e.date, '%Y-%m-%d') as date,
+              COALESCE(e.time, DATE_FORMAT(e.created_at, '%h:%i %p')) as time,
               COALESCE(ec.name, e.category_name) as category,
               e.description,
-              CASE LOWER(e.payment_method)
-                WHEN 'bkash' THEN 'bKash'
-                WHEN 'bank' THEN 'Bank'
-                ELSE 'Cash'
-              END as paymentMethod,
-              e.amount, e.notes as note, e.recipient, e.reference,
+              e.payment_method as paymentMethod,
+              e.amount, e.note, e.recipient,
               e.created_at as createdAt
        FROM expenses e
        LEFT JOIN expense_categories ec ON e.category_id = ec.id
-       ORDER BY e.expense_date DESC, e.created_at DESC`
+       ORDER BY e.date DESC, e.created_at DESC`
     );
 
     const formatted = expenses.map(e => ({
       ...e,
+      paymentMethod: formatPaymentMethod(e.paymentMethod),
       amount: Number(e.amount) || 0,
       createdAt: typeof e.createdAt === 'string' ? e.createdAt : new Date(e.createdAt).toISOString()
     }));
@@ -44,8 +55,8 @@ router.post('/', async (req, res) => {
     const expId = `exp-${Date.now()}`;
     const amount = Number(data.amount) || 0;
     const date = data.date || new Date().toISOString().split('T')[0];
-    const time = data.time || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const pMethod = (data.paymentMethod || 'Cash').toLowerCase();
+    const time = data.time || new Date().toTimeString().split(' ')[0];
+    const pMethod = normalizePaymentMethod(data.paymentMethod);
     const categoryName = data.category || 'Other';
 
     const result = await withTransaction(async (conn) => {
@@ -61,19 +72,18 @@ router.post('/', async (req, res) => {
 
       await conn.query(
         `INSERT INTO expenses (
-          id, category_id, category_name, description, amount, payment_method,
-          expense_date, expense_time, reference, recipient, notes, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+          id, date, time, category_id, category_name, description, payment_method,
+          amount, recipient, note, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
         [
           expId,
+          date,
+          time,
           categoryId,
           categoryName,
           data.description,
-          amount,
           pMethod,
-          date,
-          time,
-          data.reference || null,
+          amount,
           data.recipient || null,
           data.note || null
         ]
@@ -82,18 +92,19 @@ router.post('/', async (req, res) => {
       // Record in financial_transactions
       await conn.query(
         `INSERT INTO financial_transactions (
-          id, transaction_type, category, reference_type, reference_id, description,
-          amount, payment_method, transaction_date, transaction_time, created_at
-        ) VALUES (?, 'cash_out', ?, 'expense', ?, ?, ?, ?, ?, ?, NOW())`,
+          id, date, time, type, category, description, payment_method,
+          amount, reference_type, reference_id, notes, created_at
+        ) VALUES (?, ?, ?, 'EXPENSE', ?, ?, ?, ?, 'expense', ?, ?, NOW())`,
         [
           `tx-${Date.now()}`,
-          categoryName,
-          expId,
-          data.description || `Expense - ${categoryName}`,
-          amount,
-          pMethod,
           date,
-          time
+          time,
+          categoryName,
+          data.description || `Expense - ${categoryName}`,
+          pMethod,
+          amount,
+          expId,
+          data.note || null
         ]
       );
 
@@ -128,7 +139,7 @@ router.post('/', async (req, res) => {
         time,
         category: categoryName,
         description: data.description,
-        paymentMethod: data.paymentMethod || 'Cash',
+        paymentMethod: formatPaymentMethod(pMethod),
         amount,
         note: data.note,
         recipient: data.recipient,

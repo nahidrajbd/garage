@@ -10,6 +10,13 @@ const formatPaymentMethod = (method) => {
   return 'Cash';
 };
 
+const normalizePaymentMethod = (method) => {
+  const m = String(method || 'cash').toLowerCase();
+  if (m === 'bkash') return 'bkash';
+  if (m === 'bank') return 'bank';
+  return 'cash';
+};
+
 // GET Loan Summary
 router.get('/summary', async (req, res) => {
   try {
@@ -76,8 +83,8 @@ router.post('/records', async (req, res) => {
     const pType = isReceived ? 'received' : 'repayment';
     const amount = Number(data.amount) || 0;
     const date = data.date || new Date().toISOString().split('T')[0];
-    const time = data.time || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const pMethod = (data.paymentMethod || 'cash').toLowerCase();
+    const time = data.time || new Date().toTimeString().split(' ')[0];
+    const pMethod = normalizePaymentMethod(data.paymentMethod);
     const id = `lp-${Date.now()}`;
 
     const result = await withTransaction(async (conn) => {
@@ -98,33 +105,35 @@ router.post('/records', async (req, res) => {
       if (isReceived) {
         await conn.query(
           `INSERT INTO financial_transactions (
-            id, transaction_type, category, reference_type, reference_id, description,
-            amount, payment_method, transaction_date, transaction_time, created_at
-          ) VALUES (?, 'cash_in', 'Loan from MD', 'md_loan', ?, ?, ?, ?, ?, ?, NOW())`,
+            id, date, time, type, category, description, payment_method,
+            amount, reference_type, reference_id, notes, created_at
+          ) VALUES (?, ?, ?, 'INCOME', 'Loan from MD', ?, ?, ?, 'md_loan', ?, ?, NOW())`,
           [
             `tx-${Date.now()}`,
-            id,
-            data.note || 'Loan from MD (Inflow)',
-            amount,
-            pMethod,
             date,
-            time
+            time,
+            data.note || 'Loan from MD (Inflow)',
+            pMethod,
+            amount,
+            id,
+            data.note || null
           ]
         );
       } else {
         await conn.query(
           `INSERT INTO financial_transactions (
-            id, transaction_type, category, reference_type, reference_id, description,
-            amount, payment_method, transaction_date, transaction_time, created_at
-          ) VALUES (?, 'cash_out', 'Loan Repayment', 'md_loan', ?, ?, ?, ?, ?, ?, NOW())`,
+            id, date, time, type, category, description, payment_method,
+            amount, reference_type, reference_id, notes, created_at
+          ) VALUES (?, ?, ?, 'EXPENSE', 'Loan Repayment', ?, ?, ?, 'md_loan', ?, ?, NOW())`,
           [
             `tx-${Date.now()}`,
-            id,
-            data.note || 'Loan Repayment to MD',
-            amount,
-            pMethod,
             date,
-            time
+            time,
+            data.note || 'Loan Repayment to MD',
+            pMethod,
+            amount,
+            id,
+            data.note || null
           ]
         );
       }

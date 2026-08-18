@@ -8,6 +8,7 @@
     "dev:client": "vite",
     "server": "node server/index.js",
     "migrate": "node server/migrate.js",
+    "test": "node server/unit-tests.js",
     "build": "tsc -b && vite build",
     "deploy": "npm run build && npx wrangler deploy",
     "lint": "oxlint",

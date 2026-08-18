@@ -11,13 +11,20 @@ const formatPaymentMethod = (method) => {
   return 'Cash';
 };
 
+const normalizePaymentMethod = (method) => {
+  const m = String(method || 'cash').toLowerCase();
+  if (m === 'bkash') return 'bkash';
+  if (m === 'bank') return 'bank';
+  return 'cash';
+};
+
 // GET all Transactions for Unified Ledger
 router.get('/', async (req, res) => {
   try {
     const [rows] = await pool.query(
-      `SELECT id, DATE_FORMAT(transaction_date, '%Y-%m-%d') as date,
-              COALESCE(transaction_time, DATE_FORMAT(created_at, '%h:%i %p')) as time,
-              CASE transaction_type WHEN 'cash_in' THEN 'IN' ELSE 'OUT' END as flow,
+      `SELECT id, DATE_FORMAT(date, '%Y-%m-%d') as date,
+              COALESCE(time, DATE_FORMAT(created_at, '%h:%i %p')) as time,
+              CASE type WHEN 'INCOME' THEN 'IN' ELSE 'OUT' END as flow,
               category as type,
               description,
               reference_id as reference,
@@ -26,7 +33,7 @@ router.get('/', async (req, res) => {
               reference_id as sourceId,
               created_at
        FROM financial_transactions
-       ORDER BY transaction_date DESC, created_at DESC`
+       ORDER BY date DESC, created_at DESC`
     );
 
     const formatted = rows.map(r => ({
@@ -53,8 +60,8 @@ router.get('/', async (req, res) => {
 router.get('/cash-in', async (req, res) => {
   try {
     const [rows] = await pool.query(
-      `SELECT id, DATE_FORMAT(transaction_date, '%Y-%m-%d') as date,
-              COALESCE(transaction_time, DATE_FORMAT(created_at, '%h:%i %p')) as time,
+      `SELECT id, DATE_FORMAT(date, '%Y-%m-%d') as date,
+              COALESCE(time, DATE_FORMAT(created_at, '%h:%i %p')) as time,
               category as type,
               description,
               reference_id as reference,
@@ -62,8 +69,8 @@ router.get('/cash-in', async (req, res) => {
               amount,
               created_at as createdAt
        FROM financial_transactions
-       WHERE transaction_type = 'cash_in'
-       ORDER BY transaction_date DESC, created_at DESC`
+       WHERE type = 'INCOME'
+       ORDER BY date DESC, created_at DESC`
     );
 
     const formatted = rows.map(r => ({
@@ -91,9 +98,9 @@ router.post('/cash-in', async (req, res) => {
     const data = req.body;
     const txId = `cin-${Date.now()}`;
     const date = data.date || new Date().toISOString().split('T')[0];
-    const time = data.time || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const time = data.time || new Date().toTimeString().split(' ')[0];
     const amount = Number(data.amount) || 0;
-    const pMethod = (data.paymentMethod || 'cash').toLowerCase();
+    const pMethod = normalizePaymentMethod(data.paymentMethod);
     const type = data.type || 'Other Income';
 
     const result = await withTransaction(async (conn) => {
@@ -103,19 +110,20 @@ router.post('/cash-in', async (req, res) => {
 
       await conn.query(
         `INSERT INTO financial_transactions (
-          id, transaction_type, category, reference_type, reference_id, description,
-          amount, payment_method, transaction_date, transaction_time, created_at
-        ) VALUES (?, 'cash_in', ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+          id, date, time, type, category, description, payment_method,
+          amount, reference_type, reference_id, notes, created_at
+        ) VALUES (?, ?, ?, 'INCOME', ?, ?, ?, ?, ?, ?, ?, NOW())`,
         [
           txId,
+          date,
+          time,
           type,
+          data.description || `${type} Inflow`,
+          pMethod,
+          amount,
           refType,
           data.reference || null,
-          data.description || `${type} Inflow`,
-          amount,
-          pMethod,
-          date,
-          time
+          data.note || null
         ]
       );
 
