@@ -61,6 +61,9 @@ function jsonResponse(data, status = 200, corsHeaders) {
     status,
     headers: {
       'Content-Type': 'application/json',
+      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0',
       ...corsHeaders,
     },
   });
@@ -1568,6 +1571,18 @@ export default {
     }
 
     // Static Assets Fallback
-    return env.ASSETS.fetch(request);
+    const assetRes = await env.ASSETS.fetch(request);
+    if (path === '/' || path.endsWith('.html') || !path.includes('.')) {
+      const newHeaders = new Headers(assetRes.headers);
+      newHeaders.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+      newHeaders.set('Pragma', 'no-cache');
+      newHeaders.set('Expires', '0');
+      return new Response(assetRes.body, {
+        status: assetRes.status,
+        statusText: assetRes.statusText,
+        headers: newHeaders,
+      });
+    }
+    return assetRes;
   },
 };
