@@ -267,11 +267,18 @@ export interface DashboardMetrics {
   monthNet: number;
   totalCustomers: number;
   totalActiveInvoices: number;
+  totalInvoices?: number;
   pendingQuotationsCount?: number;
   activeJobCardsCount?: number;
   waitingJobCardsCount?: number;
   inProgressJobCardsCount?: number;
   completedTodayJobCardsCount?: number;
+  totalBilled?: number;
+  totalPaid?: number;
+  totalDue?: number;
+  totalIncome?: number;
+  totalExpense?: number;
+  netProfit?: number;
 }
 
 // ==========================================

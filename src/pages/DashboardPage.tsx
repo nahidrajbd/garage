@@ -29,6 +29,7 @@ export const DashboardPage: React.FC = () => {
   const { refreshTrigger, openCashInModal, openExpenseModal, openPaymentModal } = useApp();
 
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
+  const [allInvoices, setAllInvoices] = useState<Invoice[]>([]);
   const [recentTransactions, setRecentTransactions] = useState<Transaction[]>([]);
   const [recentInvoices, setRecentInvoices] = useState<Invoice[]>([]);
   const [recentJobCards, setRecentJobCards] = useState<JobCard[]>([]);
@@ -47,6 +48,7 @@ export const DashboardPage: React.FC = () => {
           api.getLoanSummary()
         ]);
         setMetrics(m);
+        setAllInvoices(invs);
         setRecentTransactions(txs.slice(0, 5));
         setRecentInvoices(invs.slice(0, 4));
         setRecentJobCards(jcs.slice(0, 4));
@@ -59,6 +61,25 @@ export const DashboardPage: React.FC = () => {
     };
     fetchData();
   }, [refreshTrigger]);
+
+  // Derived financial figures combining API metrics and invoice records
+  const totalBilled = (metrics?.totalBilled && metrics.totalBilled > 0)
+    ? metrics.totalBilled 
+    : allInvoices.reduce((sum, i) => sum + (Number(i.grandTotal) || 0), 0);
+
+  const totalCollected = (metrics?.totalPaid && metrics.totalPaid > 0)
+    ? metrics.totalPaid 
+    : allInvoices.reduce((sum, i) => sum + (Number(i.paid) || 0), 0);
+
+  const totalDue = (metrics?.totalDue !== undefined && metrics.totalDue >= 0 && (metrics?.totalBilled ?? 0) > 0)
+    ? metrics.totalDue 
+    : allInvoices.reduce((sum, i) => sum + (Number(i.due) || 0), 0);
+
+  const dueCount = allInvoices.filter(i => (Number(i.due) || 0) > 0).length;
+
+  const todayCashIn = metrics?.todayCashIn ?? (metrics as any)?.totalIncome ?? totalCollected;
+  const todayCashOut = metrics?.todayCashOut ?? (metrics as any)?.totalExpense ?? 0;
+  const todayNet = metrics?.todayNet ?? (todayCashIn - todayCashOut);
 
   return (
     <div className="space-y-6">
@@ -113,39 +134,41 @@ export const DashboardPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Primary KPI Cards - Today's Figures */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {/* Primary KPI Cards - Overall Billing & Collection Balances */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
-          title="Today's Cash In"
-          value={formatBDT(metrics?.todayCashIn ?? (metrics as any)?.totalIncome ?? 0)}
-          subtitle="All incoming cash & online payments"
-          icon={ArrowDownLeft}
-          variant="success"
-          onClick={openCashInModal}
+          title="Total Billed"
+          value={formatBDT(totalBilled)}
+          subtitle={`${allInvoices.length} total customer ${allInvoices.length === 1 ? 'invoice' : 'invoices'}`}
+          icon={FileText}
+          variant="primary"
+          onClick={() => navigate('/invoices')}
         />
 
         <StatCard
-          title="Today's Cash Out"
-          value={formatBDT(metrics?.todayCashOut ?? (metrics as any)?.totalExpense ?? 0)}
-          subtitle="Purchases, salaries & daily expenses"
+          title="Total Collected"
+          value={formatBDT(totalCollected)}
+          subtitle="All realized invoice payments & cash in"
+          icon={ArrowDownLeft}
+          variant="success"
+          onClick={() => navigate('/invoices')}
+        />
+
+        <StatCard
+          title="Outstanding Due"
+          value={formatBDT(totalDue)}
+          subtitle={dueCount > 0 ? `${dueCount} pending customer ${dueCount === 1 ? 'due' : 'dues'}` : 'All invoices fully settled'}
           icon={ArrowUpRight}
-          variant="danger"
-          onClick={openExpenseModal}
+          variant={totalDue > 0 ? 'danger' : 'default'}
+          onClick={() => navigate('/invoices')}
         />
 
         <StatCard
           title="Today's Net Cash"
-          value={formatBDT(
-            metrics?.todayNet ?? 
-            ((metrics?.todayCashIn ?? (metrics as any)?.totalIncome ?? 0) - (metrics?.todayCashOut ?? (metrics as any)?.totalExpense ?? 0))
-          )}
-          subtitle={
-            (metrics?.todayNet ?? 0) >= 0 
-              ? 'Positive daily cash balance' 
-              : 'Negative daily cash balance'
-          }
+          value={formatBDT(todayNet)}
+          subtitle={`Today In: ${formatBDT(todayCashIn)} • Out: ${formatBDT(todayCashOut)}`}
           icon={Wallet}
-          variant={(metrics?.todayNet ?? 0) >= 0 ? 'primary' : 'warning'}
+          variant={todayNet >= 0 ? 'primary' : 'warning'}
         />
       </div>
 
@@ -172,7 +195,7 @@ export const DashboardPage: React.FC = () => {
             <div className="p-3 bg-emerald-50/70 rounded-xl border border-emerald-100">
               <span className="text-[11px] font-semibold uppercase text-emerald-800 tracking-wider">Total Income</span>
               <p className="text-lg sm:text-xl font-extrabold text-emerald-700 font-heading mt-1">
-                {formatBDT(metrics?.monthIncome ?? (metrics as any)?.totalIncome ?? 0)}
+                {formatBDT(metrics?.monthIncome && metrics.monthIncome > 0 ? metrics.monthIncome : totalCollected)}
               </p>
             </div>
 
@@ -186,11 +209,11 @@ export const DashboardPage: React.FC = () => {
             <div className="p-3 bg-gray-50 rounded-xl border border-gray-200">
               <span className="text-[11px] font-semibold uppercase text-gray-700 tracking-wider">Net Cash Flow</span>
               <p className={`text-lg sm:text-xl font-extrabold font-heading mt-1 ${
-                (metrics?.monthNet ?? ((metrics?.monthIncome ?? (metrics as any)?.totalIncome ?? 0) - (metrics?.monthExpenses ?? (metrics as any)?.totalExpense ?? 0))) >= 0 ? 'text-gray-900' : 'text-rose-600'
+                (metrics?.monthNet ?? ((metrics?.monthIncome ?? totalCollected) - (metrics?.monthExpenses ?? 0))) >= 0 ? 'text-gray-900' : 'text-rose-600'
               }`}>
                 {formatBDT(
                   metrics?.monthNet ?? 
-                  ((metrics?.monthIncome ?? (metrics as any)?.totalIncome ?? 0) - (metrics?.monthExpenses ?? (metrics as any)?.totalExpense ?? 0))
+                  ((metrics?.monthIncome && metrics.monthIncome > 0 ? metrics.monthIncome : totalCollected) - (metrics?.monthExpenses ?? 0))
                 )}
               </p>
             </div>
@@ -198,7 +221,7 @@ export const DashboardPage: React.FC = () => {
 
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-500 pt-2 border-t border-gray-100">
             <span>Active Customers: <strong className="text-gray-900">{metrics?.totalCustomers ?? 0}</strong></span>
-            <span>Total Invoices: <strong className="text-gray-900">{metrics?.totalActiveInvoices ?? (metrics as any)?.totalInvoices ?? 0}</strong></span>
+            <span>Total Invoices: <strong className="text-gray-900">{allInvoices.length || (metrics?.totalActiveInvoices ?? 0)}</strong></span>
             <button
               type="button"
               onClick={() => navigate('/quotations')}
