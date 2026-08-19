@@ -776,6 +776,233 @@ export default {
     }
 
     // ----------------------------------------------------
+    // LEADS
+    // ----------------------------------------------------
+    const LEAD_TERMINAL_STATUSES = ['Service Taken', 'Not Interested', 'Lost'];
+
+    const formatLeadRow = (l, followUps) => ({
+      id: l.id,
+      leadNumber: l.lead_number,
+      customerName: l.customer_name,
+      phone: l.phone,
+      source: l.source,
+      inquiry: l.inquiry || '',
+      status: l.status,
+      leadDate: typeof l.lead_date === 'string' ? l.lead_date : new Date(l.lead_date).toISOString().split('T')[0],
+      lastContactDate: l.last_contact_date ? (typeof l.last_contact_date === 'string' ? l.last_contact_date : new Date(l.last_contact_date).toISOString().split('T')[0]) : undefined,
+      nextFollowUpDate: l.next_follow_up_date ? (typeof l.next_follow_up_date === 'string' ? l.next_follow_up_date : new Date(l.next_follow_up_date).toISOString().split('T')[0]) : undefined,
+      visitDate: l.visit_date ? (typeof l.visit_date === 'string' ? l.visit_date : new Date(l.visit_date).toISOString().split('T')[0]) : undefined,
+      visitTime: l.visit_time || undefined,
+      vehicleModel: l.vehicle_model || undefined,
+      customerId: l.customer_id || undefined,
+      vehicleId: l.vehicle_id || undefined,
+      jobCardId: l.job_card_id || undefined,
+      jobCardNumber: l.job_card_number || undefined,
+      quotationId: l.quotation_id || undefined,
+      quotationNumber: l.quotation_number || undefined,
+      invoiceId: l.invoice_id || undefined,
+      invoiceNumber: l.invoice_number || undefined,
+      notes: l.notes || undefined,
+      followUps: followUps || [],
+      createdAt: typeof l.created_at === 'string' ? l.created_at : new Date(l.created_at).toISOString(),
+      updatedAt: l.updated_at ? (typeof l.updated_at === 'string' ? l.updated_at : new Date(l.updated_at).toISOString()) : undefined,
+    });
+
+    const formatFollowUpRow = (fu) => ({
+      id: fu.id,
+      leadId: fu.lead_id,
+      staffId: fu.staff_id,
+      contactDate: typeof fu.contact_date === 'string' ? fu.contact_date : new Date(fu.contact_date).toISOString().split('T')[0],
+      status: fu.status,
+      note: fu.note || '',
+      nextFollowUpDate: fu.next_follow_up_date ? (typeof fu.next_follow_up_date === 'string' ? fu.next_follow_up_date : new Date(fu.next_follow_up_date).toISOString().split('T')[0]) : undefined,
+      createdAt: typeof fu.created_at === 'string' ? fu.created_at : new Date(fu.created_at).toISOString(),
+    });
+
+    if (path === '/api/leads' && method === 'GET') {
+      try {
+        const leads = await withDb(env, async (conn) => {
+          const [rows] = await conn.query('SELECT * FROM leads ORDER BY created_at DESC');
+          const [fus] = await conn.query('SELECT * FROM lead_follow_ups ORDER BY created_at ASC');
+          const fuMap = {};
+          for (const fu of fus) {
+            if (!fuMap[fu.lead_id]) fuMap[fu.lead_id] = [];
+            fuMap[fu.lead_id].push(formatFollowUpRow(fu));
+          }
+          return rows.map(l => formatLeadRow(l, fuMap[l.id]));
+        });
+        return jsonResponse(leads, 200, corsHeaders);
+      } catch (err) {
+        return jsonResponse({ error: err.message }, 500, corsHeaders);
+      }
+    }
+
+    if (path.match(/^\/api\/leads\/[^/]+$/) && method === 'GET') {
+      try {
+        const id = path.split('/')[3];
+        const lead = await withDb(env, async (conn) => {
+          const [rows] = await conn.query('SELECT * FROM leads WHERE id = ? OR lead_number = ?', [id, id]);
+          if (rows.length === 0) return null;
+          const [fus] = await conn.query('SELECT * FROM lead_follow_ups WHERE lead_id = ? ORDER BY created_at ASC', [rows[0].id]);
+          return formatLeadRow(rows[0], fus.map(formatFollowUpRow));
+        });
+        if (!lead) return jsonResponse({ error: 'Lead not found' }, 404, corsHeaders);
+        return jsonResponse(lead, 200, corsHeaders);
+      } catch (err) {
+        return jsonResponse({ error: err.message }, 500, corsHeaders);
+      }
+    }
+
+    if (path === '/api/leads' && method === 'POST') {
+      try {
+        const body = await request.json();
+        if (!body.customerName || !body.phone) {
+          return jsonResponse({ error: 'Customer name and phone are required' }, 400, corsHeaders);
+        }
+        const lead = await withTransaction(env, async (conn) => {
+          const id = `lead-${Date.now()}`;
+          const [existing] = await conn.query('SELECT lead_number FROM leads');
+          let maxSeq = 0;
+          for (const r of existing) {
+            const m = r.lead_number.match(/(\d+)$/);
+            const seq = m ? parseInt(m[1], 10) : 0;
+            if (seq > maxSeq) maxSeq = seq;
+          }
+          const leadNumber = `LD-${String(maxSeq + 1).padStart(4, '0')}`;
+          const leadDate = body.leadDate || new Date().toISOString().split('T')[0];
+          await conn.query(
+            `INSERT INTO leads (id, lead_number, customer_name, phone, source, inquiry, status, lead_date,
+                                 next_follow_up_date, vehicle_model, notes, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, 'New', ?, ?, ?, ?, NOW())`,
+            [id, leadNumber, body.customerName.trim(), body.phone.trim(), body.source || 'Facebook',
+             body.inquiry ? body.inquiry.trim() : null, leadDate, body.nextFollowUpDate || null,
+             body.vehicleModel || null, body.notes || null]
+          );
+          const [rows] = await conn.query('SELECT * FROM leads WHERE id = ?', [id]);
+          return formatLeadRow(rows[0], []);
+        });
+        return jsonResponse(lead, 201, corsHeaders);
+      } catch (err) {
+        return jsonResponse({ error: err.message }, 500, corsHeaders);
+      }
+    }
+
+    if (path.match(/^\/api\/leads\/[^/]+$/) && method === 'PUT') {
+      try {
+        const id = path.split('/')[3];
+        const body = await request.json();
+        const fieldMap = {
+          customerName: 'customer_name', phone: 'phone', source: 'source', inquiry: 'inquiry',
+          status: 'status', leadDate: 'lead_date', lastContactDate: 'last_contact_date',
+          nextFollowUpDate: 'next_follow_up_date', visitDate: 'visit_date', visitTime: 'visit_time',
+          vehicleModel: 'vehicle_model', customerId: 'customer_id', vehicleId: 'vehicle_id',
+          jobCardId: 'job_card_id', jobCardNumber: 'job_card_number', quotationId: 'quotation_id',
+          quotationNumber: 'quotation_number', invoiceId: 'invoice_id', invoiceNumber: 'invoice_number',
+          notes: 'notes',
+        };
+        const lead = await withDb(env, async (conn) => {
+          const updates = [];
+          const params = [];
+          for (const [key, col] of Object.entries(fieldMap)) {
+            if (body[key] !== undefined) {
+              updates.push(`${col} = ?`);
+              params.push(body[key] === '' ? null : body[key]);
+            }
+          }
+          if (updates.length > 0) {
+            params.push(id);
+            await conn.query(`UPDATE leads SET ${updates.join(', ')} WHERE id = ?`, params);
+          }
+          const [rows] = await conn.query('SELECT * FROM leads WHERE id = ?', [id]);
+          if (rows.length === 0) return null;
+          const [fus] = await conn.query('SELECT * FROM lead_follow_ups WHERE lead_id = ? ORDER BY created_at ASC', [id]);
+          return formatLeadRow(rows[0], fus.map(formatFollowUpRow));
+        });
+        if (!lead) return jsonResponse({ error: 'Lead not found' }, 404, corsHeaders);
+        return jsonResponse(lead, 200, corsHeaders);
+      } catch (err) {
+        return jsonResponse({ error: err.message }, 500, corsHeaders);
+      }
+    }
+
+    if (path.match(/^\/api\/leads\/[^/]+\/follow-ups$/) && method === 'POST') {
+      try {
+        const id = path.split('/')[3];
+        const body = await request.json();
+        if (!body.staffId || !body.status) {
+          return jsonResponse({ error: 'staffId and status are required' }, 400, corsHeaders);
+        }
+        const contactDate = body.contactDate || new Date().toISOString().split('T')[0];
+        const isTerminal = LEAD_TERMINAL_STATUSES.includes(body.status);
+        const nextFollowUpDate = isTerminal ? null : (body.nextFollowUpDate || null);
+
+        const lead = await withTransaction(env, async (conn) => {
+          const fuId = `fu-${id}-${Date.now()}`;
+          await conn.query(
+            `INSERT INTO lead_follow_ups (id, lead_id, staff_id, contact_date, status, note, next_follow_up_date, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
+            [fuId, id, body.staffId, contactDate, body.status, body.note ? body.note.trim() : null, nextFollowUpDate]
+          );
+          const updates = ['status = ?', 'last_contact_date = ?', 'next_follow_up_date = ?'];
+          const params = [body.status, contactDate, nextFollowUpDate];
+          if (body.visitDate) { updates.push('visit_date = ?'); params.push(body.visitDate); }
+          if (body.visitTime) { updates.push('visit_time = ?'); params.push(body.visitTime); }
+          params.push(id);
+          await conn.query(`UPDATE leads SET ${updates.join(', ')} WHERE id = ?`, params);
+
+          const [rows] = await conn.query('SELECT * FROM leads WHERE id = ?', [id]);
+          if (rows.length === 0) return null;
+          const [fus] = await conn.query('SELECT * FROM lead_follow_ups WHERE lead_id = ? ORDER BY created_at ASC', [id]);
+          return formatLeadRow(rows[0], fus.map(formatFollowUpRow));
+        });
+        if (!lead) return jsonResponse({ error: 'Lead not found' }, 404, corsHeaders);
+        return jsonResponse(lead, 200, corsHeaders);
+      } catch (err) {
+        return jsonResponse({ error: err.message }, 500, corsHeaders);
+      }
+    }
+
+    if (path.match(/^\/api\/leads\/[^/]+\/convert$/) && method === 'POST') {
+      try {
+        const id = path.split('/')[3];
+        const customer = await withTransaction(env, async (conn) => {
+          const [leadRows] = await conn.query('SELECT * FROM leads WHERE id = ?', [id]);
+          if (leadRows.length === 0) return null;
+          const lead = leadRows[0];
+
+          if (lead.customer_id) {
+            const [existing] = await conn.query('SELECT * FROM customers WHERE id = ?', [lead.customer_id]);
+            if (existing.length > 0) return existing[0];
+          }
+
+          const customerId = `cust-${Date.now()}`;
+          await conn.query(
+            `INSERT INTO customers (id, name, phone, status, created_at) VALUES (?, ?, ?, 'active', NOW())`,
+            [customerId, lead.customer_name, lead.phone]
+          );
+          await conn.query('UPDATE leads SET customer_id = ? WHERE id = ?', [customerId, id]);
+          const [created] = await conn.query('SELECT * FROM customers WHERE id = ?', [customerId]);
+          return created[0];
+        });
+        if (!customer) return jsonResponse({ error: 'Lead not found' }, 404, corsHeaders);
+        return jsonResponse({
+          id: customer.id,
+          name: customer.name,
+          phone: customer.phone,
+          email: customer.email || undefined,
+          address: customer.address || undefined,
+          notes: customer.notes || undefined,
+          vehicles: [],
+          totalVisits: 0,
+          lastServiceDate: new Date().toISOString().split('T')[0],
+          createdAt: typeof customer.created_at === 'string' ? customer.created_at : new Date(customer.created_at).toISOString(),
+        }, 200, corsHeaders);
+      } catch (err) {
+        return jsonResponse({ error: err.message }, 500, corsHeaders);
+      }
+    }
+
+    // ----------------------------------------------------
     // JOB CARDS
     // ----------------------------------------------------
     if (path === '/api/job-cards' && method === 'GET') {
