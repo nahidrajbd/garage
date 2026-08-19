@@ -2219,6 +2219,7 @@ export default {
 
     if (path === '/api/inventory/items' && method === 'GET') {
       try {
+        const includeInactive = url.searchParams.get('includeInactive') === 'true';
         const items = await withDb(env, async (conn) => {
           const [rows] = await conn.query(`
             SELECT i.id, i.name, i.category_id as categoryId, c.name as categoryName, i.unit,
@@ -2228,6 +2229,7 @@ export default {
                    DATE_FORMAT(i.updated_at, '%Y-%m-%d') as updatedAt
             FROM inventory_items i
             LEFT JOIN inventory_categories c ON i.category_id = c.id
+            ${includeInactive ? '' : `WHERE i.status = 'active'`}
             ORDER BY i.name ASC
           `);
           return rows.map((r) => ({
@@ -2284,6 +2286,30 @@ export default {
         });
         if (!item) return jsonResponse({ error: 'Inventory item not found' }, 404, corsHeaders);
         return jsonResponse(item, 200, corsHeaders);
+      } catch (err) {
+        return jsonResponse({ error: err.message }, 500, corsHeaders);
+      }
+    }
+
+    if (path.match(/^\/api\/inventory\/items\/[^/]+\/deactivate$/) && method === 'PATCH') {
+      try {
+        const id = path.split('/')[4];
+        await withDb(env, async (conn) => {
+          await conn.query('UPDATE inventory_items SET status = "inactive", updated_at = NOW() WHERE id = ?', [id]);
+        });
+        return jsonResponse({ success: true }, 200, corsHeaders);
+      } catch (err) {
+        return jsonResponse({ error: err.message }, 500, corsHeaders);
+      }
+    }
+
+    if (path.match(/^\/api\/inventory\/items\/[^/]+\/reactivate$/) && method === 'PATCH') {
+      try {
+        const id = path.split('/')[4];
+        await withDb(env, async (conn) => {
+          await conn.query('UPDATE inventory_items SET status = "active", updated_at = NOW() WHERE id = ?', [id]);
+        });
+        return jsonResponse({ success: true }, 200, corsHeaders);
       } catch (err) {
         return jsonResponse({ error: err.message }, 500, corsHeaders);
       }
