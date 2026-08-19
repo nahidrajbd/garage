@@ -104,34 +104,43 @@ export const CoverPage: React.FC = () => {
     searchResults.customers.length;
 
   return (
-    <div className="space-y-8 pb-12 max-w-6xl mx-auto">
+    <div className="relative -m-4 sm:-m-6 lg:-m-8">
+      {/* Gradient wallpaper backdrop for the Home tab */}
+      <div className="absolute inset-0 overflow-hidden bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-100">
+        <div className="absolute -top-32 -right-24 w-[32rem] h-[32rem] bg-blue-300/30 rounded-full blur-3xl" />
+        <div className="absolute top-1/3 -left-32 w-[28rem] h-[28rem] bg-purple-300/25 rounded-full blur-3xl" />
+        <div className="absolute -bottom-40 right-1/4 w-[30rem] h-[30rem] bg-indigo-300/25 rounded-full blur-3xl" />
+      </div>
+
+      <div className="relative space-y-8 pb-16 max-w-6xl mx-auto p-4 sm:p-6 lg:p-8">
       {/* Top Hero Section */}
-      <section className="bg-white rounded-3xl border border-[#E2E8F0] p-6 sm:p-8 shadow-xs relative overflow-hidden">
-        {/* Subtle decorative background gradient */}
-        <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-bl from-blue-50/70 via-slate-50/40 to-transparent rounded-full -mr-20 -mt-20 pointer-events-none" />
+      <section className="bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-700 rounded-3xl p-6 sm:p-8 shadow-lg relative overflow-hidden">
+        {/* Decorative gradient blobs */}
+        <div className="absolute -top-24 -right-16 w-80 h-80 bg-white/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-24 -left-10 w-72 h-72 bg-fuchsia-400/20 rounded-full blur-3xl pointer-events-none" />
 
         <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
           {/* Brand & Workshop Info */}
           <div className="space-y-3">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-50 border border-blue-100 text-[#2563EB] text-xs font-semibold tracking-wide uppercase">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 border border-white/25 text-white text-xs font-semibold tracking-wide uppercase backdrop-blur-sm">
               <Sparkles className="w-3.5 h-3.5" />
               <span>NEXTGARAGE</span>
-              <span className="text-slate-300">•</span>
-              <span className="text-[#64748B] normal-case font-medium">Simple Garage Management</span>
+              <span className="text-white/40">•</span>
+              <span className="text-white/80 normal-case font-medium">Simple Garage Management</span>
             </div>
 
             <div>
-              <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-[#1E293B] tracking-tight">
+              <h1 className="text-2xl sm:text-3xl font-extrabold font-heading text-white tracking-tight">
                 Arshi Automobile & Car Hub
               </h1>
-              <div className="flex flex-wrap items-center gap-y-1 gap-x-4 text-xs sm:text-sm text-[#64748B] mt-1.5">
+              <div className="flex flex-wrap items-center gap-y-1 gap-x-4 text-xs sm:text-sm text-blue-100 mt-1.5">
                 <div className="flex items-center gap-1.5">
-                  <MapPin className="w-4 h-4 text-slate-400 shrink-0" />
+                  <MapPin className="w-4 h-4 text-blue-200 shrink-0" />
                   <span>Rajshahi, Bangladesh</span>
                 </div>
-                <span className="hidden sm:inline text-slate-300">•</span>
-                <div className="flex items-center gap-1.5 font-mono text-[#1E293B]">
-                  <Phone className="w-4 h-4 text-[#2563EB] shrink-0" />
+                <span className="hidden sm:inline text-white/30">•</span>
+                <div className="flex items-center gap-1.5 font-mono text-white">
+                  <Phone className="w-4 h-4 text-blue-200 shrink-0" />
                   <a href="tel:01712110902" className="hover:underline">
                     01712110902
                   </a>
@@ -141,21 +150,21 @@ export const CoverPage: React.FC = () => {
           </div>
 
           {/* Privacy Indicator & Management Link */}
-          <div className="flex flex-wrap items-center gap-3 pt-2 md:pt-0 border-t md:border-t-0 border-[#E2E8F0]">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 border border-[#E2E8F0] text-xs font-medium text-[#64748B]">
-              <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+          <div className="flex flex-wrap items-center gap-3 pt-2 md:pt-0 border-t md:border-t-0 border-white/20">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 border border-white/20 text-xs font-medium text-white backdrop-blur-sm">
+              <ShieldCheck className="w-4 h-4 text-emerald-300 shrink-0" />
               <span>Customer-Safe View</span>
             </div>
 
             <button
               type="button"
               onClick={() => navigate('/dashboard')}
-              className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-[#1E293B] bg-slate-100 hover:bg-slate-200 border border-[#E2E8F0] rounded-xl transition-all active:scale-98"
+              className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-blue-700 bg-white hover:bg-blue-50 border border-white rounded-xl transition-all active:scale-98 shadow-sm"
               title="Open Management Dashboard with Financial Summary"
             >
-              <LayoutDashboard className="w-4 h-4 text-slate-600 shrink-0" />
+              <LayoutDashboard className="w-4 h-4 text-blue-600 shrink-0" />
               <span>Management Dashboard</span>
-              <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
+              <ArrowRight className="w-3.5 h-3.5 text-blue-400" />
             </button>
           </div>
         </div>
@@ -724,7 +733,7 @@ export const CoverPage: React.FC = () => {
       </section>
 
       {/* Footer Safe Status Banner */}
-      <section className="bg-slate-100/70 rounded-2xl border border-[#E2E8F0] p-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-[#64748B]">
+      <section className="bg-white/70 backdrop-blur-sm rounded-2xl border border-white/60 shadow-xs p-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-[#64748B]">
         <div className="flex items-center gap-2">
           <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
           <span>Cover screen is active. Financial balances and revenue metrics remain confidential.</span>
@@ -738,6 +747,7 @@ export const CoverPage: React.FC = () => {
           Go to Management Dashboard →
         </button>
       </section>
+      </div>
     </div>
   );
 };
