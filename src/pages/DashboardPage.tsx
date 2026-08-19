@@ -10,11 +10,8 @@ import {
   Eye, 
   ArrowRight,
   Landmark,
-  CheckCircle2,
-  Clock,
   Car,
-  ClipboardCheck,
-  Wrench
+  ClipboardCheck
 } from 'lucide-react';
 import { StatCard } from '../components/common/StatCard';
 import { InvoiceStatusBadge, JobCardStatusBadge } from '../components/common/Badge';
