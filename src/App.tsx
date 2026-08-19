@@ -8,6 +8,9 @@ import { ProtectedRoute } from './components/common/ProtectedRoute';
 import { LoginPage } from './pages/LoginPage';
 import { CoverPage } from './pages/CoverPage';
 import { DashboardPage } from './pages/DashboardPage';
+import { LeadsPage } from './pages/LeadsPage';
+import { CreateLeadPage } from './pages/CreateLeadPage';
+import { LeadDetailsPage } from './pages/LeadDetailsPage';
 import { JobCardsPage } from './pages/JobCardsPage';
 import { CreateJobCardPage } from './pages/CreateJobCardPage';
 import { JobCardDetailsPage } from './pages/JobCardDetailsPage';
@@ -46,6 +49,10 @@ export const App: React.FC = () => {
             >
               <Route index element={<CoverPage />} />
               <Route path="dashboard" element={<DashboardPage />} />
+              <Route path="leads" element={<LeadsPage />} />
+              <Route path="leads/new" element={<CreateLeadPage />} />
+              <Route path="leads/:id" element={<LeadDetailsPage />} />
+              <Route path="leads/edit/:id" element={<CreateLeadPage />} />
               <Route path="job-cards" element={<JobCardsPage />} />
               <Route path="job-cards/new" element={<CreateJobCardPage />} />
               <Route path="job-cards/:id" element={<JobCardDetailsPage />} />

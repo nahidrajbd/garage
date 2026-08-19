@@ -1,18 +1,18 @@
 import React from 'react';
-import { InvoiceStatus, QuotationStatus, JobCardStatus, PaymentMethod } from '../../types';
+import { InvoiceStatus, QuotationStatus, JobCardStatus, PaymentMethod, LeadStatus } from '../../types';
 
 interface BadgeProps {
   children: React.ReactNode;
-  variant?: 
-    | 'paid' 
-    | 'partial' 
-    | 'due' 
-    | 'cash' 
-    | 'bkash' 
-    | 'bank' 
-    | 'in' 
-    | 'out' 
-    | 'neutral' 
+  variant?:
+    | 'paid'
+    | 'partial'
+    | 'due'
+    | 'cash'
+    | 'bkash'
+    | 'bank'
+    | 'in'
+    | 'out'
+    | 'neutral'
     | 'primary'
     | 'draft'
     | 'sent'
@@ -24,7 +24,8 @@ interface BadgeProps {
     | 'in-progress'
     | 'completed'
     | 'delivered'
-    | 'cancelled';
+    | 'cancelled'
+    | 'orange';
   size?: 'sm' | 'md';
 }
 
@@ -64,6 +65,8 @@ export const Badge: React.FC<BadgeProps> = ({
         return 'bg-blue-50 text-blue-700 border-blue-200';
       case 'cash':
         return 'bg-emerald-50 text-emerald-800 border-emerald-200';
+      case 'orange':
+        return 'bg-orange-50 text-orange-700 border-orange-200';
       case 'primary':
         return 'bg-red-50 text-[#C1121F] border-red-200';
       case 'neutral':
@@ -85,6 +88,7 @@ export const Badge: React.FC<BadgeProps> = ({
       {(variant === 'sent' || variant === 'in-progress') && <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />}
       {variant === 'converted' && <span className="w-1.5 h-1.5 rounded-full bg-purple-500" />}
       {(variant === 'draft' || variant === 'waiting') && <span className="w-1.5 h-1.5 rounded-full bg-gray-400" />}
+      {variant === 'orange' && <span className="w-1.5 h-1.5 rounded-full bg-orange-500" />}
       {children}
     </span>
   );
@@ -146,6 +150,17 @@ export const StockMovementTypeBadge: React.FC<{ type: 'IN' | 'OUT' | 'ADJUSTMENT
     return <Badge variant="out" size="sm">Stock Out</Badge>;
   }
   return <Badge variant="sent" size="sm">Adjustment</Badge>;
+};
+
+export const LeadStatusBadge: React.FC<{ status: LeadStatus; size?: 'sm' | 'md' }> = ({ status, size }) => {
+  const variant =
+    status === 'New' ? 'waiting' :
+    status === 'Assigned' || status === 'Called' || status === 'Interested' ? 'sent' :
+    status === 'No Answer' ? 'orange' :
+    status === 'Visit Agreed' || status === 'Visit Scheduled' ? 'converted' :
+    status === 'Visited' || status === 'Service Taken' ? 'paid' :
+    'due'; // Not Interested / Lost
+  return <Badge variant={variant} size={size}>{status}</Badge>;
 };
 
 

@@ -331,3 +331,105 @@ export interface InventorySummary {
   totalInventoryValue: number;
 }
 
+// ==========================================
+// LEAD MANAGEMENT (Facebook / Sales Follow-up)
+// ==========================================
+export type LeadSource = 'Facebook' | 'Phone' | 'WhatsApp' | 'Website' | 'Walk-in' | 'Other';
+
+export type LeadStatus =
+  | 'New'
+  | 'Assigned'
+  | 'Called'
+  | 'No Answer'
+  | 'Interested'
+  | 'Visit Agreed'
+  | 'Visit Scheduled'
+  | 'Visited'
+  | 'Service Taken'
+  | 'Not Interested'
+  | 'Lost';
+
+export interface FollowUp {
+  id: string;
+  leadId: string;
+  staffId: string;       // staff name for now (mock)
+  contactDate: string;   // YYYY-MM-DD
+  status: LeadStatus;    // status the lead was set to as a result of this follow-up
+  note: string;
+  nextFollowUpDate?: string; // YYYY-MM-DD
+  createdAt: string;
+}
+
+export interface Lead {
+  id: string;
+  leadNumber: string;      // e.g. "LD-0001"
+  customerName: string;
+  phone: string;
+  source: LeadSource;
+  inquiry: string;         // original Facebook message / customer inquiry
+  assignedTo: string;      // staff name
+  status: LeadStatus;
+  leadDate: string;        // YYYY-MM-DD
+  lastContactDate?: string;    // YYYY-MM-DD
+  nextFollowUpDate?: string;   // YYYY-MM-DD
+  visitDate?: string;          // YYYY-MM-DD
+  visitTime?: string;          // HH:MM
+  vehicleModel?: string;
+  customerId?: string;
+  vehicleId?: string;
+  jobCardId?: string;
+  jobCardNumber?: string;
+  quotationId?: string;
+  quotationNumber?: string;
+  invoiceId?: string;
+  invoiceNumber?: string;
+  notes?: string;
+  followUps: FollowUp[];
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface LeadStaff {
+  id: string;
+  name: string;
+  status: 'active' | 'inactive';
+}
+
+export interface LeadFunnelStats {
+  total: number;
+  contacted: number;
+  interested: number;
+  visitAgreed: number;
+  visited: number;
+  serviceTaken: number;
+  noAnswer: number;
+  notInterested: number;
+  lost: number;
+}
+
+export interface LeadStaffPerformance {
+  staff: string;
+  total: number;
+  contacted: number;
+  visitAgreed: number;
+  visited: number;
+  serviceTaken: number;
+}
+
+export interface LeadStats {
+  totalLeads: number;
+  newCount: number;
+  followUpRequiredCount: number;
+  visitAgreedCount: number;
+  visitedCount: number;
+  serviceTakenCount: number;
+  followUpTodayCount: number;
+  overdueCount: number;
+  funnel: LeadFunnelStats;
+  staffPerformance: LeadStaffPerformance[];
+  contactRate: number;        // 0-100
+  visitAgreementRate: number; // 0-100
+  visitRate: number;          // 0-100
+  serviceConversionRate: number; // 0-100
+}
+
