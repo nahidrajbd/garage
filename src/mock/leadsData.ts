@@ -210,7 +210,6 @@ export const initialLeads: Lead[] = LEAD_SEEDS.map((seed, idx) => {
     phone: seed.phone,
     source,
     inquiry: seed.inquiry,
-    assignedTo: seed.assignedTo,
     status: seed.status,
     leadDate: dateStr(-seed.leadDaysAgo),
     lastContactDate: lastFollowUp ? lastFollowUp.contactDate : undefined,

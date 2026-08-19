@@ -4,11 +4,8 @@ import {
   LeadSource,
   FollowUp,
   Customer,
-  LeadStats,
-  LeadFunnelStats,
-  LeadStaffPerformance,
 } from '../types';
-import { initialLeads, LEAD_STAFF_NAMES } from '../mock/leadsData';
+import { initialLeads } from '../mock/leadsData';
 import { api } from './api';
 
 const STORAGE_KEY = 'nextgarage_leads_v1';
@@ -60,57 +57,6 @@ export function isTerminalStatus(status: LeadStatus): boolean {
   return status === 'Service Taken' || status === 'Not Interested' || status === 'Lost';
 }
 
-function computeFunnel(leads: Lead[]): LeadFunnelStats {
-  const total = leads.length;
-  let contacted = 0;
-  let interested = 0;
-  let visitAgreed = 0;
-  let visited = 0;
-  let serviceTaken = 0;
-  let noAnswer = 0;
-  let notInterested = 0;
-  let lost = 0;
-
-  for (const lead of leads) {
-    const tier = statusTier(lead.status);
-    if (tier >= 1) contacted++;
-    if (tier >= 2) interested++;
-    if (tier >= 3) visitAgreed++;
-    if (tier >= 4) visited++;
-    if (tier >= 5) serviceTaken++;
-
-    if (lead.status === 'No Answer') { contacted++; noAnswer++; }
-    if (lead.status === 'Not Interested') { contacted++; notInterested++; }
-    if (lead.status === 'Lost') { contacted++; lost++; }
-  }
-
-  return { total, contacted, interested, visitAgreed, visited, serviceTaken, noAnswer, notInterested, lost };
-}
-
-function computeStaffPerformance(leads: Lead[]): LeadStaffPerformance[] {
-  const staffNames = Array.from(new Set([...LEAD_STAFF_NAMES, ...leads.map(l => l.assignedTo)]));
-  return staffNames
-    .map(staff => {
-      const staffLeads = leads.filter(l => l.assignedTo === staff);
-      const tiers = staffLeads.map(l => statusTier(l.status));
-      return {
-        staff,
-        total: staffLeads.length,
-        contacted: staffLeads.filter(l => statusTier(l.status) >= 1 || l.status === 'No Answer' || l.status === 'Not Interested' || l.status === 'Lost').length,
-        visitAgreed: tiers.filter(t => t >= 3).length,
-        visited: tiers.filter(t => t >= 4).length,
-        serviceTaken: tiers.filter(t => t >= 5).length,
-      };
-    })
-    .filter(s => s.total > 0)
-    .sort((a, b) => b.total - a.total);
-}
-
-function pct(numerator: number, denominator: number): number {
-  if (!denominator) return 0;
-  return Math.round((numerator / denominator) * 1000) / 10;
-}
-
 export const leadsService = {
   getLeads: async (): Promise<Lead[]> => {
     return [...getFromStorage()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
@@ -125,7 +71,6 @@ export const leadsService = {
     phone: string;
     source: LeadSource;
     inquiry: string;
-    assignedTo: string;
     leadDate?: string;
     nextFollowUpDate?: string;
     vehicleModel?: string;
@@ -139,7 +84,6 @@ export const leadsService = {
       phone: data.phone.trim(),
       source: data.source,
       inquiry: data.inquiry.trim(),
-      assignedTo: data.assignedTo,
       status: 'New',
       leadDate: data.leadDate || todayStr(),
       nextFollowUpDate: data.nextFollowUpDate || undefined,
@@ -164,10 +108,6 @@ export const leadsService = {
 
   updateLeadStatus: async (id: string, status: LeadStatus): Promise<Lead | null> => {
     return leadsService.updateLead(id, { status, lastContactDate: todayStr() });
-  },
-
-  assignLead: async (id: string, staffName: string): Promise<Lead | null> => {
-    return leadsService.updateLead(id, { assignedTo: staffName });
   },
 
   addFollowUp: async (
@@ -219,13 +159,6 @@ export const leadsService = {
     return [...lead.followUps].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   },
 
-  linkLeadRecord: async (
-    leadId: string,
-    links: { jobCardId?: string; jobCardNumber?: string; quotationId?: string; quotationNumber?: string; invoiceId?: string; invoiceNumber?: string }
-  ): Promise<Lead | null> => {
-    return leadsService.updateLead(leadId, links);
-  },
-
   convertLeadToCustomer: async (leadId: string): Promise<Customer | null> => {
     const leads = getFromStorage();
     const idx = leads.findIndex(l => l.id === leadId);
@@ -251,46 +184,5 @@ export const leadsService = {
     saveToStorage(leads);
 
     return customer;
-  },
-
-  getLeadStats: async (range?: { startDate?: string; endDate?: string }): Promise<LeadStats> => {
-    let leads = getFromStorage();
-
-    if (range?.startDate) {
-      leads = leads.filter(l => l.leadDate >= range.startDate!);
-    }
-    if (range?.endDate) {
-      leads = leads.filter(l => l.leadDate <= range.endDate!);
-    }
-
-    const today = todayStr();
-    const funnel = computeFunnel(leads);
-    const staffPerformance = computeStaffPerformance(leads);
-
-    const newCount = leads.filter(l => l.status === 'New').length;
-    const followUpRequiredCount = leads.filter(
-      l => !isTerminalStatus(l.status) && (!l.nextFollowUpDate || l.nextFollowUpDate <= today)
-    ).length;
-    const followUpTodayCount = leads.filter(l => l.nextFollowUpDate === today).length;
-    const overdueCount = leads.filter(
-      l => l.nextFollowUpDate && l.nextFollowUpDate < today && !isTerminalStatus(l.status)
-    ).length;
-
-    return {
-      totalLeads: leads.length,
-      newCount,
-      followUpRequiredCount,
-      visitAgreedCount: funnel.visitAgreed,
-      visitedCount: funnel.visited,
-      serviceTakenCount: funnel.serviceTaken,
-      followUpTodayCount,
-      overdueCount,
-      funnel,
-      staffPerformance,
-      contactRate: pct(funnel.contacted, funnel.total),
-      visitAgreementRate: pct(funnel.visitAgreed, funnel.contacted),
-      visitRate: pct(funnel.visited, funnel.visitAgreed),
-      serviceConversionRate: pct(funnel.serviceTaken, funnel.visited),
-    };
   },
 };
