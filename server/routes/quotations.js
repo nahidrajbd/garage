@@ -140,7 +140,6 @@ router.post('/', async (req, res) => {
     const data = req.body;
     const qId = `qt-${Date.now()}`;
     const dbStatus = statusMapToDb[data.status] || 'draft';
-    const qNumber = data.quotationNumber || `QT-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`;
 
     const result = await withTransaction(async (conn) => {
       let customerId = data.customerId;
@@ -173,6 +172,30 @@ router.post('/', async (req, res) => {
         }
       }
 
+      // Safe quotation number generation
+      let qNumber = data.quotationNumber;
+      if (!qNumber) {
+        const [setRows] = await conn.query('SELECT setting_value FROM settings WHERE setting_key = "quotation_prefix"');
+        const prefix = setRows[0]?.setting_value || 'QT-';
+        const [countRows] = await conn.query('SELECT COUNT(*) as count FROM quotations');
+        const nextSeq = (countRows[0]?.count || 0) + 1;
+        qNumber = `${prefix}${String(nextSeq).padStart(4, '0')}`;
+      }
+
+      // Ensure no unique key collision
+      const [existingQ] = await conn.query('SELECT id FROM quotations WHERE quotation_number = ?', [qNumber]);
+      if (existingQ.length > 0) {
+        const [setRows] = await conn.query('SELECT setting_value FROM settings WHERE setting_key = "quotation_prefix"');
+        const prefix = setRows[0]?.setting_value || 'QT-';
+        const [countRows] = await conn.query('SELECT COUNT(*) as count FROM quotations');
+        const nextSeq = (countRows[0]?.count || 0) + 1;
+        qNumber = `${prefix}${String(nextSeq).padStart(4, '0')}`;
+        const [stillExists] = await conn.query('SELECT id FROM quotations WHERE quotation_number = ?', [qNumber]);
+        if (stillExists.length > 0) {
+          qNumber = `${prefix}${Date.now().toString().slice(-4)}`;
+        }
+      }
+
       // Calculate totals
       let calculatedSubtotal = 0;
       if (Array.isArray(data.items)) {
@@ -192,10 +215,10 @@ router.post('/', async (req, res) => {
           qNumber,
           customerId || null,
           vehicleId || null,
-          data.customerName || null,
-          data.customerPhone || null,
-          data.vehicleRegistration || null,
-          data.vehicleModel || null,
+          data.customerName || 'Customer',
+          data.customerPhone || 'N/A',
+          data.vehicleRegistration || 'N/A',
+          data.vehicleModel || 'Vehicle',
           data.date || new Date().toISOString().split('T')[0],
           data.validUntil || new Date(Date.now() + 15 * 86400000).toISOString().split('T')[0],
           dbStatus,

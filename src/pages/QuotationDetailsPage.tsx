@@ -67,7 +67,7 @@ export const QuotationDetailsPage: React.FC = () => {
     try {
       const updated = await api.updateQuotationStatus(quotation.id, newStatus);
       if (updated) {
-        setQuotation(updated);
+        setQuotation(prev => prev ? { ...prev, ...updated, status: newStatus } : updated);
         showToast(`Quotation status updated to ${newStatus}`, 'success');
         triggerRefresh();
       }
