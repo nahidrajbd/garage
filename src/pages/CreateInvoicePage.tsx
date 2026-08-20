@@ -24,7 +24,7 @@ import {
   InvoiceStatus,
   JobCard
 } from '../types';
-import { formatBDT, generateInvoiceNumber } from '../utils/formatters';
+import { formatBDT } from '../utils/formatters';
 
 export const CreateInvoicePage: React.FC = () => {
   const navigate = useNavigate();
@@ -70,7 +70,6 @@ export const CreateInvoicePage: React.FC = () => {
         setCustomers(custList);
         setServicesCatalog(srvList);
         setInvoicesCount(invList.length);
-        setInvoiceNumber(generateInvoiceNumber(invList.length));
 
         if (fromJobCardId) {
           const jc = await api.getJobCardById(fromJobCardId);
@@ -284,7 +283,7 @@ export const CreateInvoicePage: React.FC = () => {
         <div className="flex items-center gap-3">
           <div className="text-right">
             <span className="text-xs text-gray-400 font-mono">Invoice Number</span>
-            <p className="font-mono text-base font-bold text-gray-900">{invoiceNumber}</p>
+            <p className="font-mono text-base font-bold text-gray-400 italic">Assigned on save</p>
           </div>
         </div>
       </div>

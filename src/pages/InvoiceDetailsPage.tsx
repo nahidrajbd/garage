@@ -14,6 +14,7 @@ import {
   QrCode
 } from 'lucide-react';
 import { InvoiceStatusBadge, PaymentMethodBadge } from '../components/common/Badge';
+import { Barcode } from '../components/common/Barcode';
 import { useApp } from '../context/AppContext';
 import { api } from '../services/api';
 import { Invoice, Settings } from '../types';
@@ -155,6 +156,9 @@ export const InvoiceDetailsPage: React.FC = () => {
             <p className="font-mono text-base font-extrabold text-[#C1121F]">
               {invoice.invoiceNumber}
             </p>
+            <div className="flex justify-start sm:justify-end">
+              <Barcode value={invoice.invoiceNumber} height={36} />
+            </div>
             <p className="text-xs text-gray-600">
               Date: <strong>{formatDate(invoice.date)}</strong>
             </p>

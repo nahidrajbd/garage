@@ -1447,21 +1447,18 @@ export default {
           const [setRows] = await conn.query('SELECT setting_value FROM settings WHERE setting_key = "invoice_prefix"');
           const prefix = setRows[0]?.setting_value || 'INV-';
 
-          // Safe invoice number generation (COUNT(*)+1 collides once any invoice has been deleted)
-          const [countRows] = await conn.query('SELECT COUNT(*) as count FROM invoices');
-          let invoiceNumber = `${prefix}${String((countRows[0]?.count || 0) + 1).padStart(4, '0')}`;
-          const [existingInv] = await conn.query('SELECT id FROM invoices WHERE invoice_number = ?', [invoiceNumber]);
-          if (existingInv.length > 0) {
-            const [maxRows] = await conn.query(
-              `SELECT MAX(CAST(SUBSTRING(invoice_number, ?) AS UNSIGNED)) as maxSeq FROM invoices WHERE invoice_number LIKE ?`,
-              [prefix.length + 1, `${prefix}%`]
-            );
-            const nextSeq = (Number(maxRows[0]?.maxSeq) || 0) + 1;
-            invoiceNumber = `${prefix}${String(nextSeq).padStart(4, '0')}`;
-            const [stillCollides] = await conn.query('SELECT id FROM invoices WHERE invoice_number = ?', [invoiceNumber]);
-            if (stillCollides.length > 0) {
-              invoiceNumber = `${prefix}${Date.now().toString().slice(-4)}`;
+          // Random 4-digit invoice number (e.g. INV-4821), retried on collision
+          let invoiceNumber = null;
+          for (let attempt = 0; attempt < 25; attempt++) {
+            const candidate = `${prefix}${String(Math.floor(Math.random() * 10000)).padStart(4, '0')}`;
+            const [existingInv] = await conn.query('SELECT id FROM invoices WHERE invoice_number = ?', [candidate]);
+            if (existingInv.length === 0) {
+              invoiceNumber = candidate;
+              break;
             }
+          }
+          if (!invoiceNumber) {
+            invoiceNumber = `${prefix}${Date.now().toString().slice(-4)}`;
           }
 
           const grandTotal = Number(body.grandTotal) || 0;

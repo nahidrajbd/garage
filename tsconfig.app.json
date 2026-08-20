@@ -10,6 +10,7 @@
 
     /* Bundler mode */
     "moduleResolution": "bundler",
+    "esModuleInterop": true,
     "verbatimModuleSyntax": false,
     "moduleDetection": "force",
     "noEmit": true,
