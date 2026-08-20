@@ -1715,7 +1715,7 @@ export default {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              from: `${settings.business_name || 'NextGarage'} <onboarding@resend.dev>`,
+              from: `${settings.business_name || 'NextGarage'} <sales@arshicar.com>`,
               to: [targetEmail],
               reply_to: settings.email || undefined,
               subject: `Invoice ${inv.invoice_number} from ${settings.business_name || 'NextGarage'}`,
