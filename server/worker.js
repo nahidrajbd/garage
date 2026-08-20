@@ -1118,7 +1118,7 @@ export default {
               serviceName: i.description || 'Service',
               description: i.description,
               quantity: Number(i.quantity),
-              unitPrice: Number(i.unit_price),
+              price: Number(i.unit_price),
               total: Number(i.total),
             }));
             const payments = pmtRows.filter((p) => p.invoice_id === inv.id).map((p) => ({
@@ -1193,7 +1193,7 @@ export default {
               serviceName: i.description || 'Service',
               description: i.description,
               quantity: Number(i.quantity),
-              unitPrice: Number(i.unit_price),
+              price: Number(i.unit_price),
               total: Number(i.total),
             })),
             payments: payments.map((p) => ({
@@ -1219,9 +1219,23 @@ export default {
           const invId = `inv-${Date.now()}`;
           const [setRows] = await conn.query('SELECT setting_value FROM settings WHERE setting_key = "invoice_prefix"');
           const prefix = setRows[0]?.setting_value || 'INV-';
+
+          // Safe invoice number generation (COUNT(*)+1 collides once any invoice has been deleted)
           const [countRows] = await conn.query('SELECT COUNT(*) as count FROM invoices');
-          const nextSeq = (countRows[0]?.count || 0) + 1;
-          const invoiceNumber = `${prefix}${String(nextSeq).padStart(4, '0')}`;
+          let invoiceNumber = `${prefix}${String((countRows[0]?.count || 0) + 1).padStart(4, '0')}`;
+          const [existingInv] = await conn.query('SELECT id FROM invoices WHERE invoice_number = ?', [invoiceNumber]);
+          if (existingInv.length > 0) {
+            const [maxRows] = await conn.query(
+              `SELECT MAX(CAST(SUBSTRING(invoice_number, ?) AS UNSIGNED)) as maxSeq FROM invoices WHERE invoice_number LIKE ?`,
+              [prefix.length + 1, `${prefix}%`]
+            );
+            const nextSeq = (Number(maxRows[0]?.maxSeq) || 0) + 1;
+            invoiceNumber = `${prefix}${String(nextSeq).padStart(4, '0')}`;
+            const [stillCollides] = await conn.query('SELECT id FROM invoices WHERE invoice_number = ?', [invoiceNumber]);
+            if (stillCollides.length > 0) {
+              invoiceNumber = `${prefix}${Date.now().toString().slice(-4)}`;
+            }
+          }
 
           const grandTotal = Number(body.grandTotal) || 0;
           const paid = Number(body.paid) || 0;
@@ -1259,10 +1273,12 @@ export default {
           if (body.items && Array.isArray(body.items)) {
             for (let i = 0; i < body.items.length; i++) {
               const itm = body.items[i];
+              const itmQty = Number(itm.quantity) || 1;
+              const itmPrice = Number(itm.price ?? itm.unitPrice) || 0;
               await conn.query(
                 `INSERT INTO invoice_items (id, invoice_id, item_type, description, quantity, unit_price, total, sort_order, created_at)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
-                [`ii-${Date.now()}-${i}`, invId, itm.type || 'service', itm.description || itm.serviceName || 'Service', itm.quantity || 1, itm.unitPrice || 0, itm.total || 0, i]
+                [`ii-${Date.now()}-${i}`, invId, itm.type || 'service', itm.description || itm.serviceName || 'Service', itmQty, itmPrice, itmQty * itmPrice, i]
               );
             }
           }

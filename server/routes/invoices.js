@@ -154,7 +154,6 @@ router.post('/', async (req, res) => {
   try {
     const data = req.body;
     const invId = `inv-${Date.now()}`;
-    const invoiceNumber = data.invoiceNumber || `INV-${new Date().getFullYear()}-${Date.now().toString().slice(-4)}`;
     const invoiceDate = data.date || new Date().toISOString().split('T')[0];
     const invoiceTime = new Date().toTimeString().split(' ')[0];
     const pMethod = normalizePaymentMethod(data.paymentMethod);
@@ -162,6 +161,25 @@ router.post('/', async (req, res) => {
     const result = await withTransaction(async (conn) => {
       let customerId = data.customerId;
       let vehicleId = data.vehicleId;
+
+      // Safe invoice number generation (COUNT(*)+1 collides once any invoice has been deleted)
+      const [setRows] = await conn.query('SELECT setting_value FROM settings WHERE setting_key = "invoice_prefix"');
+      const prefix = setRows[0]?.setting_value || 'INV-';
+      const [countRows] = await conn.query('SELECT COUNT(*) as count FROM invoices');
+      let invoiceNumber = data.invoiceNumber || `${prefix}${String((countRows[0]?.count || 0) + 1).padStart(4, '0')}`;
+      const [existingInv] = await conn.query('SELECT id FROM invoices WHERE invoice_number = ?', [invoiceNumber]);
+      if (existingInv.length > 0) {
+        const [maxRows] = await conn.query(
+          `SELECT MAX(CAST(SUBSTRING(invoice_number, ?) AS UNSIGNED)) as maxSeq FROM invoices WHERE invoice_number LIKE ?`,
+          [prefix.length + 1, `${prefix}%`]
+        );
+        const nextSeq = (Number(maxRows[0]?.maxSeq) || 0) + 1;
+        invoiceNumber = `${prefix}${String(nextSeq).padStart(4, '0')}`;
+        const [stillCollides] = await conn.query('SELECT id FROM invoices WHERE invoice_number = ?', [invoiceNumber]);
+        if (stillCollides.length > 0) {
+          invoiceNumber = `${prefix}${Date.now().toString().slice(-4)}`;
+        }
+      }
 
       // Auto link or create customer
       if (!customerId && data.customerPhone) {
