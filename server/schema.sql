@@ -375,4 +375,51 @@ CREATE TABLE IF NOT EXISTS technicians (
   INDEX idx_technicians_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- 22. LEADS (Facebook / Phone inquiries & staff follow-up)
+CREATE TABLE IF NOT EXISTS leads (
+  id VARCHAR(50) NOT NULL PRIMARY KEY,
+  lead_number VARCHAR(50) NOT NULL UNIQUE,
+  customer_name VARCHAR(191) NOT NULL,
+  phone VARCHAR(50) NOT NULL,
+  source VARCHAR(50) NOT NULL DEFAULT 'Facebook',
+  inquiry TEXT NULL,
+  status VARCHAR(50) NOT NULL DEFAULT 'New',
+  lead_date DATE NOT NULL,
+  last_contact_date DATE NULL,
+  next_follow_up_date DATE NULL,
+  visit_date DATE NULL,
+  visit_time VARCHAR(20) NULL,
+  vehicle_model VARCHAR(191) NULL,
+  customer_id VARCHAR(50) NULL,
+  vehicle_id VARCHAR(50) NULL,
+  job_card_id VARCHAR(50) NULL,
+  job_card_number VARCHAR(50) NULL,
+  quotation_id VARCHAR(50) NULL,
+  quotation_number VARCHAR(50) NULL,
+  invoice_id VARCHAR(50) NULL,
+  invoice_number VARCHAR(50) NULL,
+  notes TEXT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  INDEX idx_leads_number (lead_number),
+  INDEX idx_leads_status (status),
+  INDEX idx_leads_phone (phone),
+  INDEX idx_leads_next_followup (next_follow_up_date),
+  CONSTRAINT fk_leads_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 23. LEAD FOLLOW-UPS
+CREATE TABLE IF NOT EXISTS lead_follow_ups (
+  id VARCHAR(50) NOT NULL PRIMARY KEY,
+  lead_id VARCHAR(50) NOT NULL,
+  staff_id VARCHAR(100) NOT NULL,
+  contact_date DATE NOT NULL,
+  status VARCHAR(50) NOT NULL,
+  note TEXT NULL,
+  next_follow_up_date DATE NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_lead_fu_lead (lead_id),
+  CONSTRAINT fk_lead_fu_lead FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 SET FOREIGN_KEY_CHECKS = 1;

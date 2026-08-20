@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import { testConnection } from './db.js';
 
 import customersRouter from './routes/customers.js';
+import leadsRouter from './routes/leads.js';
 import jobCardsRouter from './routes/jobCards.js';
 import quotationsRouter from './routes/quotations.js';
 import invoicesRouter from './routes/invoices.js';
@@ -46,6 +47,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/technicians', techniciansRouter);
 app.use('/api/customers', customersRouter);
+app.use('/api/leads', leadsRouter);
 app.use('/api/job-cards', jobCardsRouter);
 app.use('/api/quotations', quotationsRouter);
 app.use('/api/invoices', invoicesRouter);

@@ -274,6 +274,44 @@ async function migrate() {
     }
     console.log('✅ Technicians seeded.');
 
+    // Seed real Leads (Facebook/phone inquiries) if table is empty
+    const [leadRows] = await connection.query('SELECT COUNT(*) as count FROM leads');
+    if (leadRows[0].count === 0) {
+      console.log('🔄 Seeding leads...');
+      const initialLeads = [
+        { name: 'অস্পষ্ট', phone: '01303-843154', note: 'দেখা করবেন' },
+        { name: 'ইমতিয়াজ', phone: '01712-183309', note: 'শোরুম দেখতে ওয়ার্কশপে আসবে' },
+        { name: 'ড. মিজানুল', phone: '01718-184748', note: 'শোরুম দেখতে আসবে, ওয়ার্কশপে আসবে' },
+        { name: 'ড. আমিন', phone: '01865-068309', note: 'পলিশিং কাজ, রাজশাহীতে আসলে ওয়ার্কশপে আসবে' },
+        { name: 'অস্পষ্ট', phone: '01788-114867', note: 'সামনের কিছু মেরামত করাতে চান' },
+        { name: 'অস্পষ্ট', phone: '01344-765011', note: 'ফোন ধরেনি' },
+        { name: 'অস্পষ্ট', phone: '01635-512950', note: 'ফোন ধরেনি' },
+        { name: 'অস্পষ্ট', phone: '01776-116194', note: 'প্রয়োজন মনে হলে পরে ফোন দিবে' },
+        { name: 'অস্পষ্ট', phone: '01711-054062', note: 'গাড়ির কাজের জন্য ওয়ার্কশপে আসবে' },
+        { name: 'আশিক রহমান', phone: '01723-066630', note: 'গাড়ির পলিশ করাতে চান' },
+        { name: 'কুশল আহমেদ', phone: '01789-120360', note: 'হুইল অ্যালাইনমেন্টসহ অন্যান্য কাজ করাতে চান' },
+        { name: 'মোঃ আলম মন্ডল', phone: '01711-318563', note: 'শোরুম দেখতে এবং সময় নিয়ে আসবেন' },
+        { name: 'মাস্টার', phone: '01635-512950', note: 'ফোন ধরেনি' },
+        { name: 'মাহের খান', phone: '01722-587336', note: 'গাড়ির সমস্যা থাকলে ওয়ার্কশপে আসবে' },
+        { name: 'তাহের', phone: '01717-821405', note: 'শোরুম দেখতে এবং সময় নিয়ে আসবে' },
+        { name: 'কামরুল হাসান', phone: '01797-845739', note: 'ফোন ধরেনি' },
+        { name: 'অস্পষ্ট', phone: '01725-955084', note: '২০/০৮/২০২৫ তারিখে ওয়ার্কশপে আসতে দেখেছে' },
+        { name: 'অস্পষ্ট', phone: '01776-714993', note: 'শোরুম দেখতে এবং ওয়ার্কশপে আসবে' },
+        { name: 'অস্পষ্ট', phone: '01714-591635', note: 'শোরুম দেখতে এবং সময় নিয়ে আসবে' },
+        { name: 'আশরাফুল হক', phone: '01711-203146', note: 'গাড়ির কাজ করাতে চান, ওয়ার্কশপে আসবেন' },
+      ];
+      for (let i = 0; i < initialLeads.length; i++) {
+        const lead = initialLeads[i];
+        const leadNumber = `LD-${String(i + 1).padStart(4, '0')}`;
+        await connection.query(
+          `INSERT INTO leads (id, lead_number, customer_name, phone, source, status, lead_date, notes, created_at)
+           VALUES (?, ?, ?, ?, 'Phone', 'New', CURDATE(), ?, NOW())`,
+          [`lead-${i + 1}`, leadNumber, lead.name, lead.phone, lead.note]
+        );
+      }
+      console.log('✅ Leads seeded.');
+    }
+
     console.log('🎉 Migration and initial seeding completed successfully!');
   } catch (error) {
     console.error('❌ Migration error:', error.message);

@@ -367,7 +367,6 @@ export interface Lead {
   phone: string;
   source: LeadSource;
   inquiry: string;         // original Facebook message / customer inquiry
-  assignedTo: string;      // staff name
   status: LeadStatus;
   leadDate: string;        // YYYY-MM-DD
   lastContactDate?: string;    // YYYY-MM-DD
@@ -393,43 +392,5 @@ export interface LeadStaff {
   id: string;
   name: string;
   status: 'active' | 'inactive';
-}
-
-export interface LeadFunnelStats {
-  total: number;
-  contacted: number;
-  interested: number;
-  visitAgreed: number;
-  visited: number;
-  serviceTaken: number;
-  noAnswer: number;
-  notInterested: number;
-  lost: number;
-}
-
-export interface LeadStaffPerformance {
-  staff: string;
-  total: number;
-  contacted: number;
-  visitAgreed: number;
-  visited: number;
-  serviceTaken: number;
-}
-
-export interface LeadStats {
-  totalLeads: number;
-  newCount: number;
-  followUpRequiredCount: number;
-  visitAgreedCount: number;
-  visitedCount: number;
-  serviceTakenCount: number;
-  followUpTodayCount: number;
-  overdueCount: number;
-  funnel: LeadFunnelStats;
-  staffPerformance: LeadStaffPerformance[];
-  contactRate: number;        // 0-100
-  visitAgreementRate: number; // 0-100
-  visitRate: number;          // 0-100
-  serviceConversionRate: number; // 0-100
 }
 

@@ -20,7 +20,9 @@ import {
   InventoryItem,
   StockMovement,
   InventorySummary,
-  Technician
+  Technician,
+  Lead,
+  LeadStatus
 } from '../types';
 import { initialStaff } from '../mock/initialData';
 
@@ -155,6 +157,63 @@ export const api = {
     return request<Customer>(`/customers/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
+    });
+  },
+
+  // Leads
+  async getLeads(): Promise<Lead[]> {
+    return request<Lead[]>('/leads');
+  },
+
+  async getLeadById(id: string): Promise<Lead | undefined> {
+    try {
+      return await request<Lead>(`/leads/${id}`);
+    } catch {
+      return undefined;
+    }
+  },
+
+  async createLead(data: {
+    customerName: string;
+    phone: string;
+    source: string;
+    inquiry?: string;
+    leadDate?: string;
+    nextFollowUpDate?: string;
+    vehicleModel?: string;
+    notes?: string;
+  }): Promise<Lead> {
+    return request<Lead>('/leads', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async updateLead(id: string, data: Partial<Lead>): Promise<Lead | null> {
+    return request<Lead>(`/leads/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async addLeadFollowUp(leadId: string, data: {
+    staffId: string;
+    contactDate?: string;
+    status: LeadStatus;
+    note?: string;
+    nextFollowUpDate?: string;
+    visitDate?: string;
+    visitTime?: string;
+  }): Promise<Lead | null> {
+    return request<Lead>(`/leads/${leadId}/follow-ups`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async convertLeadToCustomer(leadId: string): Promise<Customer | null> {
+    return request<Customer>(`/leads/${leadId}/convert`, {
+      method: 'POST',
     });
   },
 
