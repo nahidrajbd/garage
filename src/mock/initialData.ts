@@ -672,7 +672,7 @@ export const initialJobCards: JobCard[] = [
     vehicleRegistration: 'Dhaka Metro-Ga 33-1122',
     vehicleModel: 'Toyota Premio',
     mileage: '94,200 km',
-    status: 'Waiting',
+    status: 'In Progress',
     customerComplaint: 'Left front fender dent repair and whole passenger side deep scratch repainting.',
     requiredWork: [
       { id: 'jw-4', serviceName: 'Dent & Paint', description: 'Panel beating on front left fender and primer coat' },
@@ -727,7 +727,7 @@ export const initialJobCards: JobCard[] = [
     vehicleRegistration: 'Rajshahi Metro-Cha 11-9876',
     vehicleModel: 'Toyota Noah',
     mileage: '118,500 km',
-    status: 'Delivered',
+    status: 'Completed',
     customerComplaint: 'Car wash, interior seat shampoo extraction and wheel alignment check.',
     requiredWork: [
       { id: 'jw-8', serviceName: 'Car Wash', description: 'Deep foam exterior wash and undercarriage cleaning' },
@@ -781,7 +781,7 @@ export const initialJobCards: JobCard[] = [
     vehicleRegistration: 'Rajshahi Metro-Kha 12-1044',
     vehicleModel: 'Toyota Prius',
     mileage: '135,000 km',
-    status: 'Cancelled',
+    status: 'Completed',
     customerComplaint: 'Hybrid inverter coolant flush and main traction battery diagnostic scan.',
     requiredWork: [
       { id: 'jw-12', serviceName: 'General Inspection', description: 'OBD2 hybrid scanner live data log' }

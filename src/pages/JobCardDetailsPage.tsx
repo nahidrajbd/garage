@@ -1,21 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { 
-  Printer, 
-  ArrowLeft, 
-  Edit3, 
-  Clock, 
-  Wrench, 
-  CheckCircle2, 
-  Truck, 
-  XCircle, 
-  FileText, 
-  ClipboardList, 
-  Camera, 
-  Phone, 
-  MapPin, 
-  Car, 
-  User, 
+import {
+  Printer,
+  ArrowLeft,
+  Edit3,
+  Wrench,
+  CheckCircle2,
+  FileText,
+  ClipboardList,
+  Camera,
+  Phone,
+  MapPin,
+  Car,
+  User,
   AlertCircle,
   Calendar,
   ExternalLink
@@ -131,16 +128,6 @@ export const JobCardDetailsPage: React.FC = () => {
         <div className="flex items-center gap-2 flex-wrap">
           {/* Quick Status Buttons */}
           <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-xl overflow-x-auto">
-            {jobCard.status !== 'Waiting' && (
-              <button
-                type="button"
-                onClick={() => handleUpdateStatus('Waiting')}
-                className="px-2.5 py-1.5 text-xs font-semibold text-gray-700 hover:bg-white rounded-lg transition-colors inline-flex items-center gap-1"
-              >
-                <Clock className="w-3.5 h-3.5" />
-                <span>Waiting</span>
-              </button>
-            )}
             {jobCard.status !== 'In Progress' && (
               <button
                 type="button"
@@ -159,26 +146,6 @@ export const JobCardDetailsPage: React.FC = () => {
               >
                 <CheckCircle2 className="w-3.5 h-3.5" />
                 <span>Completed</span>
-              </button>
-            )}
-            {jobCard.status !== 'Delivered' && (
-              <button
-                type="button"
-                onClick={() => handleUpdateStatus('Delivered')}
-                className="px-2.5 py-1.5 text-xs font-semibold text-teal-800 hover:bg-white rounded-lg transition-colors inline-flex items-center gap-1"
-              >
-                <Truck className="w-3.5 h-3.5" />
-                <span>Delivered</span>
-              </button>
-            )}
-            {jobCard.status !== 'Cancelled' && (
-              <button
-                type="button"
-                onClick={() => handleUpdateStatus('Cancelled')}
-                className="px-2.5 py-1.5 text-xs font-semibold text-rose-700 hover:bg-white rounded-lg transition-colors inline-flex items-center gap-1"
-              >
-                <XCircle className="w-3.5 h-3.5" />
-                <span>Cancel</span>
               </button>
             )}
           </div>

@@ -449,9 +449,9 @@ router.post('/:id/convert', async (req, res) => {
         [invoiceId, invoiceNumber, id]
       );
 
-      // If linked to a job card, link the invoice to the job card too
+      // If linked to a job card, link the invoice and mark the job as done
       if (linkedJobCardId) {
-        await conn.query('UPDATE job_cards SET invoice_id = ? WHERE id = ?', [invoiceId, linkedJobCardId]);
+        await conn.query('UPDATE job_cards SET invoice_id = ?, status = ? WHERE id = ?', [invoiceId, 'completed', linkedJobCardId]);
       }
 
       // Return newly created invoice

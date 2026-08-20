@@ -463,18 +463,8 @@ export const DashboardPage: React.FC = () => {
           </div>
         </div>
 
-        {/* 4 Job Card Summary Counters */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="p-3 bg-blue-50/70 rounded-xl border border-blue-100 text-center">
-            <span className="text-[11px] font-semibold uppercase text-blue-800 tracking-wider">Active Jobs</span>
-            <p className="text-xl font-extrabold text-blue-900 mt-0.5">{metrics?.activeJobCardsCount ?? 0}</p>
-          </div>
-
-          <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 text-center">
-            <span className="text-[11px] font-semibold uppercase text-gray-600 tracking-wider">Waiting</span>
-            <p className="text-xl font-extrabold text-gray-900 mt-0.5">{metrics?.waitingJobCardsCount ?? 0}</p>
-          </div>
-
+        {/* Job Card Summary Counters */}
+        <div className="grid grid-cols-2 gap-3">
           <div className="p-3 bg-amber-50/70 rounded-xl border border-amber-100 text-center">
             <span className="text-[11px] font-semibold uppercase text-amber-800 tracking-wider">In Progress</span>
             <p className="text-xl font-extrabold text-amber-900 mt-0.5">{metrics?.inProgressJobCardsCount ?? 0}</p>

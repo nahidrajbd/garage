@@ -36,12 +36,7 @@ export type QuotationStatus =
   | 'Expired'
   | 'Converted';
 
-export type JobCardStatus = 
-  | 'Waiting'
-  | 'In Progress'
-  | 'Completed'
-  | 'Delivered'
-  | 'Cancelled';
+export type JobCardStatus = 'In Progress' | 'Completed';
 
 export type CashInType = 'Service Payment' | 'Loan from MD' | 'Other Income';
 
@@ -270,7 +265,6 @@ export interface DashboardMetrics {
   totalInvoices?: number;
   pendingQuotationsCount?: number;
   activeJobCardsCount?: number;
-  waitingJobCardsCount?: number;
   inProgressJobCardsCount?: number;
   completedTodayJobCardsCount?: number;
   totalBilled?: number;

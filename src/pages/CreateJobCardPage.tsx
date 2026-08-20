@@ -42,7 +42,7 @@ export const CreateJobCardPage: React.FC = () => {
   const [expectedDeliveryDate, setExpectedDeliveryDate] = useState(
     new Date(Date.now() + 86400000).toISOString().split('T')[0]
   );
-  const [status, setStatus] = useState<JobCardStatus>('Waiting');
+  const [status, setStatus] = useState<JobCardStatus>('In Progress');
 
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
@@ -451,11 +451,8 @@ export const CreateJobCardPage: React.FC = () => {
                   onChange={e => setStatus(e.target.value as JobCardStatus)}
                   className="w-full text-xs px-2.5 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:outline-none bg-white font-semibold"
                 >
-                  <option value="Waiting">Waiting</option>
                   <option value="In Progress">In Progress</option>
                   <option value="Completed">Completed</option>
-                  <option value="Delivered">Delivered</option>
-                  <option value="Cancelled">Cancelled</option>
                 </select>
               </div>
             </div>

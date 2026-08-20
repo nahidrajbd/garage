@@ -41,10 +41,9 @@ router.get('/', async (req, res) => {
     );
 
     // Job Cards status breakdown
-    const [jcWaiting] = await pool.query(`SELECT COUNT(*) as total FROM job_cards WHERE status = 'waiting'`);
     const [jcProgress] = await pool.query(`SELECT COUNT(*) as total FROM job_cards WHERE status = 'in_progress'`);
     const [jcCompletedToday] = await pool.query(
-      `SELECT COUNT(*) as total FROM job_cards WHERE status IN ('completed', 'delivered') AND DATE_FORMAT(date, '%Y-%m-%d') = ?`,
+      `SELECT COUNT(*) as total FROM job_cards WHERE status = 'completed' AND DATE_FORMAT(date, '%Y-%m-%d') = ?`,
       [todayStr]
     );
 
@@ -71,9 +70,8 @@ router.get('/', async (req, res) => {
     const monthExpenses = Number(monthCashRows[0].monthExpenses) || 0;
     const monthNet = monthIncome - monthExpenses;
 
-    const waitingJobCardsCount = Number(jcWaiting[0].total) || 0;
     const inProgressJobCardsCount = Number(jcProgress[0].total) || 0;
-    const activeJobCardsCount = waitingJobCardsCount + inProgressJobCardsCount;
+    const activeJobCardsCount = inProgressJobCardsCount;
     const completedTodayJobCardsCount = Number(jcCompletedToday[0].total) || 0;
 
     const tIncome = Number(finRows[0]?.totalIncome) || 0;
@@ -91,7 +89,6 @@ router.get('/', async (req, res) => {
       totalInvoices: Number(invRows[0].total) || 0,
       pendingQuotationsCount: Number(quotRows[0].total) || 0,
       activeJobCardsCount,
-      waitingJobCardsCount,
       inProgressJobCardsCount,
       completedTodayJobCardsCount,
       totalBilled: Number(invSummary[0]?.totalBilled) || 0,

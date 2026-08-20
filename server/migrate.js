@@ -58,6 +58,20 @@ async function migrate() {
     }
     console.log('✅ job_cards table schema synchronized with all columns.');
 
+    // Simplify job_cards.status down to just 'in_progress' / 'completed'
+    const [statusColRows] = await connection.query(`
+      SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'job_cards' AND COLUMN_NAME = 'status'
+    `);
+    const currentStatusType = statusColRows[0]?.COLUMN_TYPE || '';
+    if (currentStatusType.includes('waiting') || currentStatusType.includes('delivered') || currentStatusType.includes('cancelled')) {
+      console.log('🔄 Simplifying job_cards.status to In Progress / Completed...');
+      await connection.query(`UPDATE job_cards SET status = 'in_progress' WHERE status IN ('waiting', 'cancelled')`);
+      await connection.query(`UPDATE job_cards SET status = 'completed' WHERE status = 'delivered'`);
+      await connection.query(`ALTER TABLE job_cards MODIFY COLUMN status ENUM('in_progress', 'completed') NOT NULL DEFAULT 'in_progress'`);
+      console.log('✅ job_cards.status simplified.');
+    }
+
     // Seed Settings
     console.log('🔄 Checking settings...');
     const defaultSettings = [

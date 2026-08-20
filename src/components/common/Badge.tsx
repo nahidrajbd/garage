@@ -111,12 +111,7 @@ export const QuotationStatusBadge: React.FC<{ status: QuotationStatus }> = ({ st
 };
 
 export const JobCardStatusBadge: React.FC<{ status: JobCardStatus }> = ({ status }) => {
-  const variant = 
-    status === 'Waiting' ? 'waiting' :
-    status === 'In Progress' ? 'in-progress' :
-    status === 'Completed' ? 'completed' :
-    status === 'Delivered' ? 'delivered' :
-    'cancelled';
+  const variant = status === 'In Progress' ? 'in-progress' : 'completed';
   return <Badge variant={variant}>{status}</Badge>;
 };
 

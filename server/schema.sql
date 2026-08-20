@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS job_cards (
   mileage VARCHAR(50) NULL,
   date DATE NOT NULL,
   expected_delivery_date DATE NULL,
-  status ENUM('waiting', 'in_progress', 'completed', 'delivered', 'cancelled') NOT NULL DEFAULT 'waiting',
+  status ENUM('in_progress', 'completed') NOT NULL DEFAULT 'in_progress',
   customer_complaint TEXT NULL,
   vehicle_condition TEXT NULL,
   assigned_to VARCHAR(100) NULL,

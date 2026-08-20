@@ -70,19 +70,13 @@ function jsonResponse(data, status = 200, corsHeaders) {
 }
 
 const statusMapToFrontend = {
-  waiting: 'Waiting',
   in_progress: 'In Progress',
   completed: 'Completed',
-  delivered: 'Delivered',
-  cancelled: 'Cancelled',
 };
 
 const statusMapToDb = {
-  Waiting: 'waiting',
   'In Progress': 'in_progress',
   Completed: 'completed',
-  Delivered: 'delivered',
-  Cancelled: 'cancelled',
 };
 
 export default {
@@ -335,10 +329,9 @@ export default {
             `SELECT COUNT(*) as c FROM quotations WHERE status IN ('draft', 'sent', 'accepted')`
           );
 
-          const [jcWaiting] = await conn.query(`SELECT COUNT(*) as c FROM job_cards WHERE status = 'waiting'`);
           const [jcProgress] = await conn.query(`SELECT COUNT(*) as c FROM job_cards WHERE status = 'in_progress'`);
           const [jcCompletedToday] = await conn.query(
-            `SELECT COUNT(*) as c FROM job_cards WHERE status IN ('completed', 'delivered') AND DATE_FORMAT(date, '%Y-%m-%d') = ?`,
+            `SELECT COUNT(*) as c FROM job_cards WHERE status = 'completed' AND DATE_FORMAT(date, '%Y-%m-%d') = ?`,
             [todayStr]
           );
 
@@ -372,9 +365,8 @@ export default {
           const monthExpenses = Number(monthCashRows[0]?.monthExpenses) || 0;
           const monthNet = monthIncome - monthExpenses;
 
-          const waitingJobCardsCount = Number(jcWaiting[0]?.c) || 0;
           const inProgressJobCardsCount = Number(jcProgress[0]?.c) || 0;
-          const activeJobCardsCount = waitingJobCardsCount + inProgressJobCardsCount;
+          const activeJobCardsCount = inProgressJobCardsCount;
           const completedTodayJobCardsCount = Number(jcCompletedToday[0]?.c) || 0;
 
           const tIncome = Number(finRows[0]?.totalIncome) || 0;
@@ -392,7 +384,6 @@ export default {
             totalInvoices: invCount[0]?.c || 0,
             pendingQuotationsCount: Number(quotRows[0]?.c) || 0,
             activeJobCardsCount,
-            waitingJobCardsCount,
             inProgressJobCardsCount,
             completedTodayJobCardsCount,
             totalBilled: Number(invSummary[0]?.totalBilled) || 0,
@@ -402,7 +393,7 @@ export default {
             totalExpense: tExpense,
             netProfit: tIncome - tExpense,
             recentInvoices: recentInvoices.map(r => ({ ...r, grandTotal: Number(r.grandTotal), paid: Number(r.paid), due: Number(r.due) })),
-            recentJobCards: recentJobCards.map(r => ({ ...r, status: statusMapToFrontend[r.status] || 'Waiting' })),
+            recentJobCards: recentJobCards.map(r => ({ ...r, status: statusMapToFrontend[r.status] || 'In Progress' })),
           };
         });
         return jsonResponse(metrics, 200, corsHeaders);
@@ -1026,7 +1017,7 @@ export default {
 
           return jcRows.map((j) => ({
             ...j,
-            status: statusMapToFrontend[j.status] || 'Waiting',
+            status: statusMapToFrontend[j.status] || 'In Progress',
             requiredWork: items.filter((it) => it.jobCardId === j.id),
             beforePhotos: photos.filter((p) => p.jobCardId === j.id && p.photoType === 'before').map((p) => p.filePath),
             afterPhotos: photos.filter((p) => p.jobCardId === j.id && p.photoType === 'after').map((p) => p.filePath),
@@ -1064,7 +1055,7 @@ export default {
 
           return {
             ...jc,
-            status: statusMapToFrontend[jc.status] || 'Waiting',
+            status: statusMapToFrontend[jc.status] || 'In Progress',
             requiredWork: items || [],
             beforePhotos: photos.filter((p) => p.photoType === 'before').map((p) => p.filePath),
             afterPhotos: photos.filter((p) => p.photoType === 'after').map((p) => p.filePath),
@@ -1082,7 +1073,7 @@ export default {
       try {
         const data = await request.json();
         const jcId = `jc-${Date.now()}`;
-        const dbStatus = statusMapToDb[data.status] || 'waiting';
+        const dbStatus = statusMapToDb[data.status] || 'in_progress';
 
         const result = await withTransaction(env, async (conn) => {
           let customerId = data.customerId;
@@ -1204,7 +1195,7 @@ export default {
             jobCardNumber: jcNumber,
             customerId,
             vehicleId,
-            status: data.status || 'Waiting',
+            status: data.status || 'In Progress',
             requiredWork: createdItems,
             beforePhotos: data.beforePhotos || [],
             afterPhotos: data.afterPhotos || [],
@@ -1222,7 +1213,7 @@ export default {
       try {
         const id = path.split('/')[3];
         const data = await request.json();
-        const dbStatus = statusMapToDb[data.status] || 'waiting';
+        const dbStatus = statusMapToDb[data.status] || 'in_progress';
 
         const result = await withTransaction(env, async (conn) => {
           await conn.query(
@@ -1277,7 +1268,7 @@ export default {
       try {
         const id = path.split('/')[3];
         const { status } = await request.json();
-        const dbStatus = statusMapToDb[status] || 'waiting';
+        const dbStatus = statusMapToDb[status] || 'in_progress';
         await withDb(env, async (conn) => {
           await conn.query('UPDATE job_cards SET status = ?, updated_at = NOW() WHERE id = ?', [dbStatus, id]);
         });
@@ -1321,7 +1312,8 @@ export default {
         const id = path.split('/')[3];
         const { invoiceId } = await request.json();
         await withDb(env, async (conn) => {
-          await conn.query('UPDATE job_cards SET invoice_id = ? WHERE id = ?', [invoiceId, id]);
+          // Converting to an invoice means the workshop job is done
+          await conn.query('UPDATE job_cards SET invoice_id = ?, status = ? WHERE id = ?', [invoiceId, 'completed', id]);
         });
         return jsonResponse({ success: true }, 200, corsHeaders);
       } catch (err) {
@@ -2046,7 +2038,7 @@ export default {
           );
 
           if (linkedJobCardId) {
-            await conn.query('UPDATE job_cards SET invoice_id = ? WHERE id = ?', [invoiceId, linkedJobCardId]);
+            await conn.query('UPDATE job_cards SET invoice_id = ?, status = ? WHERE id = ?', [invoiceId, 'completed', linkedJobCardId]);
           }
 
           return {

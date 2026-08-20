@@ -6,19 +6,13 @@ const router = express.Router();
 
 // Helper to map DB status to frontend casing
 const statusMapToFrontend = {
-  waiting: 'Waiting',
   in_progress: 'In Progress',
-  completed: 'Completed',
-  delivered: 'Delivered',
-  cancelled: 'Cancelled'
+  completed: 'Completed'
 };
 
 const statusMapToDb = {
-  'Waiting': 'waiting',
   'In Progress': 'in_progress',
-  'Completed': 'completed',
-  'Delivered': 'delivered',
-  'Cancelled': 'cancelled'
+  'Completed': 'completed'
 };
 
 // GET all Job Cards
@@ -71,7 +65,7 @@ router.get('/', async (req, res) => {
 
     const formatted = jobCards.map(j => ({
       ...j,
-      status: statusMapToFrontend[j.status] || 'Waiting',
+      status: statusMapToFrontend[j.status] || 'In Progress',
       requiredWork: itemMap[j.id] || [],
       beforePhotos: beforePhotosMap[j.id] || [],
       afterPhotos: afterPhotosMap[j.id] || [],
@@ -126,7 +120,7 @@ router.get('/:id', async (req, res) => {
 
     res.json({
       ...jc,
-      status: statusMapToFrontend[jc.status] || 'Waiting',
+      status: statusMapToFrontend[jc.status] || 'In Progress',
       requiredWork: items || [],
       beforePhotos: photos.filter(p => p.photoType === 'before').map(p => p.filePath),
       afterPhotos: photos.filter(p => p.photoType === 'after').map(p => p.filePath),
@@ -143,7 +137,7 @@ router.post('/', async (req, res) => {
   try {
     const data = req.body;
     const jcId = `jc-${Date.now()}`;
-    const dbStatus = statusMapToDb[data.status] || 'waiting';
+    const dbStatus = statusMapToDb[data.status] || 'in_progress';
 
     const result = await withTransaction(async (conn) => {
       // Auto find or create customer if needed
@@ -259,7 +253,7 @@ router.post('/', async (req, res) => {
         id: jcId,
         customerId,
         vehicleId,
-        status: data.status || 'Waiting',
+        status: data.status || 'In Progress',
         requiredWork: createdItems,
         beforePhotos: data.beforePhotos || [],
         afterPhotos: data.afterPhotos || [],
@@ -348,7 +342,8 @@ router.post('/:id/link-invoice', async (req, res) => {
   try {
     const { id } = req.params;
     const { invoiceId } = req.body;
-    await pool.query('UPDATE job_cards SET invoice_id = ? WHERE id = ?', [invoiceId, id]);
+    // Converting to an invoice means the workshop job is done
+    await pool.query('UPDATE job_cards SET invoice_id = ?, status = ? WHERE id = ?', [invoiceId, 'completed', id]);
     res.json({ success: true });
   } catch (error) {
     console.error('Error linking invoice:', error);

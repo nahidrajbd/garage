@@ -1,15 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  ClipboardCheck, 
-  Plus, 
-  Search, 
-  Eye, 
-  Trash2, 
-  Clock, 
-  Wrench, 
-  CheckCircle2, 
-  Truck, 
+  ClipboardCheck,
+  Plus,
+  Search,
+  Eye,
+  Trash2,
+  Wrench,
+  CheckCircle2,
   Calendar,
   Edit3,
   User,
@@ -22,7 +20,7 @@ import { EmptyState } from '../components/common/EmptyState';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
-import { JobCard, JobCardStatus } from '../types';
+import { JobCard } from '../types';
 import { formatDate } from '../utils/formatters';
 
 export const JobCardsPage: React.FC = () => {
@@ -90,11 +88,10 @@ export const JobCardsPage: React.FC = () => {
 
   // Summaries
   const todayStr = new Date().toISOString().split('T')[0];
-  const waitingCount = jobCards.filter(j => j.status === 'Waiting').length;
   const inProgressCount = jobCards.filter(j => j.status === 'In Progress').length;
-  const activeCount = waitingCount + inProgressCount;
+  const completedCount = jobCards.filter(j => j.status === 'Completed').length;
   const completedTodayCount = jobCards.filter(
-    j => (j.status === 'Completed' || j.status === 'Delivered') && j.date === todayStr
+    j => j.status === 'Completed' && j.date === todayStr
   ).length;
 
   const handleDelete = async () => {
@@ -133,37 +130,29 @@ export const JobCardsPage: React.FC = () => {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          title="Active Job Cards"
-          value={activeCount}
-          subtitle="Currently inside workshop"
-          icon={ClipboardCheck}
-          variant="primary"
-        />
-
-        <StatCard
-          title="Waiting for Service"
-          value={waitingCount}
-          subtitle="In queue / inspection"
-          icon={Clock}
-          variant="default"
-        />
-
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard
           title="In Progress"
           value={inProgressCount}
-          subtitle="Technicians currently working"
+          subtitle="Currently inside workshop"
           icon={Wrench}
-          variant="warning"
+          variant="primary"
         />
 
         <StatCard
           title="Completed Today"
           value={completedTodayCount}
-          subtitle="Finished or delivered today"
+          subtitle="Finished today"
           icon={CheckCircle2}
           variant="success"
+        />
+
+        <StatCard
+          title="Completed (All Time)"
+          value={completedCount}
+          subtitle="Total finished job cards"
+          icon={ClipboardCheck}
+          variant="default"
         />
       </div>
 
@@ -196,7 +185,7 @@ export const JobCardsPage: React.FC = () => {
 
           {/* Status Filter Tabs */}
           <div className="flex items-center gap-1 p-1 bg-gray-100 rounded-xl overflow-x-auto">
-            {['ALL', 'Waiting', 'In Progress', 'Completed', 'Delivered', 'Cancelled'].map(status => (
+            {['ALL', 'In Progress', 'Completed'].map(status => (
               <button
                 key={status}
                 type="button"

@@ -640,11 +640,10 @@ export const storage = {
       q => q.status === 'Draft' || q.status === 'Sent' || q.status === 'Accepted'
     ).length;
 
-    const waitingJobCardsCount = jobCards.filter(j => j.status === 'Waiting').length;
     const inProgressJobCardsCount = jobCards.filter(j => j.status === 'In Progress').length;
-    const activeJobCardsCount = waitingJobCardsCount + inProgressJobCardsCount;
+    const activeJobCardsCount = inProgressJobCardsCount;
     const completedTodayJobCardsCount = jobCards.filter(
-      j => (j.status === 'Completed' || j.status === 'Delivered') && j.date === todayStr
+      j => j.status === 'Completed' && j.date === todayStr
     ).length;
 
     return {
@@ -658,7 +657,6 @@ export const storage = {
       totalActiveInvoices: invoices.length,
       pendingQuotationsCount,
       activeJobCardsCount,
-      waitingJobCardsCount,
       inProgressJobCardsCount,
       completedTodayJobCardsCount
     };
