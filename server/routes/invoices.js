@@ -37,6 +37,21 @@ const escapeHtml = (str) => String(str ?? '').replace(/[&<>"']/g, (c) => ({
 
 const formatMoney = (n) => `৳${(Number(n) || 0).toLocaleString('en-BD', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+const REVIEW_SMS_TEMPLATE = '(Arshi Car) Dear Customer,\nShare your feedback about your recent service. Click to review: arshicar.com/review';
+
+// Queues a review-request SMS to fire 10 minutes after an invoice is fully paid.
+// Uses INSERT IGNORE against the (reference_type, reference_id) unique key so
+// re-triggering on an already-paid invoice is a harmless no-op.
+async function queueReviewSms(conn, invoice) {
+  if (!invoice.customer_phone) return;
+  const id = `sms-${invoice.id}`;
+  await conn.query(
+    `INSERT IGNORE INTO sms_queue (id, phone, message, reference_type, reference_id, send_after, status, created_at)
+     VALUES (?, ?, ?, 'invoice_review', ?, DATE_ADD(NOW(), INTERVAL 10 MINUTE), 'pending', NOW())`,
+    [id, invoice.customer_phone, REVIEW_SMS_TEMPLATE, invoice.id]
+  );
+}
+
 function buildInvoiceEmailHtml({
   businessName, footerText, invoiceNumber, date, customerName,
   vehicleModel, vehicleRegistration, items, subtotal, discount, grandTotal, paid, due,
@@ -368,6 +383,10 @@ router.post('/', async (req, res) => {
         await conn.query('UPDATE job_cards SET invoice_id = ? WHERE id = ?', [invId, data.jobCardId]);
       }
 
+      if (status === 'paid') {
+        await queueReviewSms(conn, { id: invId, customer_phone: data.customerPhone });
+      }
+
       return {
         ...data,
         id: invId,
@@ -423,6 +442,10 @@ router.post('/:id/payments', async (req, res) => {
         `UPDATE invoices SET paid = ?, due = ?, status = ? WHERE id = ?`,
         [newPaid, newDue, newStatus, inv.id]
       );
+
+      if (newStatus === 'paid' && inv.status !== 'paid') {
+        await queueReviewSms(conn, inv);
+      }
 
       // Insert payment record
       const paymentId = `pmt-${Date.now()}`;

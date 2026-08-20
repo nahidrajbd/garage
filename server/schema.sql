@@ -422,4 +422,20 @@ CREATE TABLE IF NOT EXISTS lead_follow_ups (
   CONSTRAINT fk_lead_fu_lead FOREIGN KEY (lead_id) REFERENCES leads(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- 24. SMS QUEUE (delayed/scheduled outbound SMS, e.g. review requests after payment)
+CREATE TABLE IF NOT EXISTS sms_queue (
+  id VARCHAR(50) NOT NULL PRIMARY KEY,
+  phone VARCHAR(50) NOT NULL,
+  message TEXT NOT NULL,
+  reference_type VARCHAR(50) NOT NULL DEFAULT 'other',
+  reference_id VARCHAR(50) NULL,
+  send_after DATETIME NOT NULL,
+  status ENUM('pending', 'sent', 'failed') NOT NULL DEFAULT 'pending',
+  sent_at DATETIME NULL,
+  error TEXT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_sms_queue_status_send_after (status, send_after),
+  UNIQUE KEY uniq_sms_reference (reference_type, reference_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 SET FOREIGN_KEY_CHECKS = 1;

@@ -8,9 +8,10 @@ directory = "./dist"
 binding = "ASSETS"
 not_found_handling = "single-page-application"
 
-# 11:00 PM Asia/Dhaka (UTC+6) daily, expressed as 17:00 UTC
+# "0 17 * * *"  -> daily business summary email, 11:00 PM Asia/Dhaka (UTC+6)
+# "* * * * *"   -> processes the sms_queue (10-min-delayed review SMS after invoice payment)
 [triggers]
-crons = ["0 17 * * *"]
+crons = ["0 17 * * *", "* * * * *"]
 
 [vars]
 DB_HOST = "165.99.74.72"

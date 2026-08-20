@@ -260,6 +260,83 @@ async function sendDailySummaryEmail(env) {
   }
 }
 
+const REVIEW_SMS_TEMPLATE = '(Arshi Car) Dear Customer,\nShare your feedback about your recent service. Click to review: arshicar.com/review';
+
+// Queues a review-request SMS to fire 10 minutes after an invoice is fully paid.
+// INSERT IGNORE against the (reference_type, reference_id) unique key makes
+// re-triggering on an already-paid invoice a harmless no-op.
+async function queueReviewSms(conn, invoice) {
+  if (!invoice.customer_phone) return;
+  const id = `sms-${invoice.id}`;
+  await conn.query(
+    `INSERT IGNORE INTO sms_queue (id, phone, message, reference_type, reference_id, send_after, status, created_at)
+     VALUES (?, ?, ?, 'invoice_review', ?, DATE_ADD(NOW(), INTERVAL 10 MINUTE), 'pending', NOW())`,
+    [id, invoice.customer_phone, REVIEW_SMS_TEMPLATE, invoice.id]
+  );
+}
+
+// Converts a local Bangladeshi number (e.g. "01712-345678") into the
+// country-code-prefixed format the SMS gateway expects ("8801712345678").
+function normalizeBdPhone(phone) {
+  if (!phone) return null;
+  const digits = String(phone).replace(/\D/g, '');
+  if (digits.startsWith('880')) return digits;
+  if (digits.startsWith('0')) return `880${digits.slice(1)}`;
+  if (digits.length === 10) return `880${digits}`;
+  return digits;
+}
+
+async function sendSms(env, phone, message) {
+  const contacts = normalizeBdPhone(phone);
+  if (!contacts) throw new Error('Invalid phone number');
+  if (!env.SMS_API_KEY || !env.SMS_SENDER_ID) {
+    throw new Error('SMS_API_KEY / SMS_SENDER_ID not configured');
+  }
+  const params = new URLSearchParams({
+    api_key: env.SMS_API_KEY,
+    type: 'text',
+    contacts,
+    senderid: env.SMS_SENDER_ID,
+    msg: message,
+    label: 'transactional',
+  });
+  const res = await fetch(`https://sms.mram.com.bd/smsapi?${params.toString()}`);
+  const text = await res.text();
+  if (!res.ok) throw new Error(`SMS API error: ${res.status} ${text}`);
+  return text;
+}
+
+// Processes any sms_queue rows whose 10-minute delay has elapsed.
+async function processSmsQueue(env) {
+  try {
+    const due = await withDb(env, async (conn) => {
+      const [rows] = await conn.query(
+        `SELECT * FROM sms_queue WHERE status = 'pending' AND send_after <= NOW() ORDER BY send_after ASC LIMIT 20`
+      );
+      return rows;
+    });
+
+    for (const row of due) {
+      try {
+        await sendSms(env, row.phone, row.message);
+        await withDb(env, async (conn) => {
+          await conn.query(`UPDATE sms_queue SET status = 'sent', sent_at = NOW() WHERE id = ?`, [row.id]);
+        });
+      } catch (err) {
+        await withDb(env, async (conn) => {
+          await conn.query(
+            `UPDATE sms_queue SET status = 'failed', error = ? WHERE id = ?`,
+            [String(err.message || err).slice(0, 500), row.id]
+          );
+        });
+        console.error(`Failed to send queued SMS ${row.id}:`, err);
+      }
+    }
+  } catch (err) {
+    console.error('Error processing SMS queue:', err);
+  }
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -1723,6 +1800,10 @@ export default {
             );
           }
 
+          if (status === 'paid') {
+            await queueReviewSms(conn, { id: invId, customer_phone: body.customerPhone });
+          }
+
           return { id: invId, invoiceNumber, ...body, grandTotal, paid, due, status };
         });
         return jsonResponse(created, 201, corsHeaders);
@@ -1755,6 +1836,10 @@ export default {
           const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
           await conn.query('UPDATE invoices SET paid = ?, due = ?, status = ? WHERE id = ?', [newPaid, newDue, newStatus, inv.id]);
+
+          if (newStatus === 'paid' && inv.status !== 'paid') {
+            await queueReviewSms(conn, inv);
+          }
 
           const paymentId = `pmt-${Date.now()}`;
           await conn.query(
@@ -3295,6 +3380,10 @@ export default {
   },
 
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(sendDailySummaryEmail(env));
+    if (event.cron === '0 17 * * *') {
+      ctx.waitUntil(sendDailySummaryEmail(env));
+    } else {
+      ctx.waitUntil(processSmsQueue(env));
+    }
   },
 };
