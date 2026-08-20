@@ -135,6 +135,131 @@ function buildInvoiceEmailHtml({
   </div>`;
 }
 
+const DAILY_SUMMARY_RECIPIENTS = ['kamruzzamansumondon3@gmail.com'];
+
+function buildDailySummaryEmailHtml({ businessName, date, incomeRows, expenseRows, totalIncome, totalExpenses }) {
+  const incomeHtml = incomeRows.length
+    ? incomeRows.map(r => `
+      <tr>
+        <td style="padding:6px 4px; border-bottom:1px solid #eee;">${escapeHtml(r.customerName || '-')}</td>
+        <td style="padding:6px 4px; border-bottom:1px solid #eee;">${escapeHtml(r.customerPhone || '-')}</td>
+        <td style="padding:6px 4px; border-bottom:1px solid #eee;">${escapeHtml(r.vehicleModel || '-')}${r.vehicleRegistration ? ` (${escapeHtml(r.vehicleRegistration)})` : ''}</td>
+        <td style="padding:6px 4px; border-bottom:1px solid #eee; text-align:right;">${formatMoney(r.amount)}</td>
+      </tr>`).join('')
+    : `<tr><td colspan="4" style="padding:8px 4px; color:#6b7280;">No income recorded today.</td></tr>`;
+
+  const expenseHtml = expenseRows.length
+    ? expenseRows.map(r => `
+      <tr>
+        <td style="padding:6px 4px; border-bottom:1px solid #eee;">${escapeHtml(r.categoryName || '-')}</td>
+        <td style="padding:6px 4px; border-bottom:1px solid #eee;">${escapeHtml(r.description || '-')}</td>
+        <td style="padding:6px 4px; border-bottom:1px solid #eee; text-align:right;">${formatMoney(r.amount)}</td>
+      </tr>`).join('')
+    : `<tr><td colspan="3" style="padding:8px 4px; color:#6b7280;">No expenses recorded today.</td></tr>`;
+
+  const net = totalIncome - totalExpenses;
+
+  return `
+  <div style="font-family: Arial, Helvetica, sans-serif; max-width: 640px; margin: 0 auto; color:#1f2937;">
+    <div style="background:#C1121F; padding:20px 24px; text-align:center; border-radius:8px 8px 0 0;">
+      <h1 style="color:#fff; margin:0; font-size:20px;">${escapeHtml(businessName)}</h1>
+      <p style="color:#fff; margin:4px 0 0; font-size:13px; opacity:0.9;">Daily Summary — ${escapeHtml(date)}</p>
+    </div>
+    <div style="padding:24px; border:1px solid #e5e7eb; border-top:none; border-radius:0 0 8px 8px;">
+      <h2 style="font-size:15px; margin:0 0 8px;">Income</h2>
+      <table style="width:100%; border-collapse:collapse; font-size:13px;">
+        <thead>
+          <tr style="border-bottom:2px solid #e5e7eb; text-align:left; color:#6b7280;">
+            <th style="padding:6px 4px;">Customer</th>
+            <th style="padding:6px 4px;">Phone</th>
+            <th style="padding:6px 4px;">Vehicle</th>
+            <th style="padding:6px 4px; text-align:right;">Paid</th>
+          </tr>
+        </thead>
+        <tbody>${incomeHtml}</tbody>
+      </table>
+      <p style="text-align:right; font-weight:bold; margin:8px 0 20px; color:#047857;">Total Income: ${formatMoney(totalIncome)}</p>
+
+      <h2 style="font-size:15px; margin:0 0 8px;">Expenses</h2>
+      <table style="width:100%; border-collapse:collapse; font-size:13px;">
+        <thead>
+          <tr style="border-bottom:2px solid #e5e7eb; text-align:left; color:#6b7280;">
+            <th style="padding:6px 4px;">Category</th>
+            <th style="padding:6px 4px;">Description</th>
+            <th style="padding:6px 4px; text-align:right;">Amount</th>
+          </tr>
+        </thead>
+        <tbody>${expenseHtml}</tbody>
+      </table>
+      <p style="text-align:right; font-weight:bold; margin:8px 0 20px; color:#b91c1c;">Total Expenses: ${formatMoney(totalExpenses)}</p>
+
+      <p style="text-align:right; font-size:15px; font-weight:bold; border-top:2px solid #e5e7eb; padding-top:10px; margin:0;">
+        Net: <span style="color:${net >= 0 ? '#047857' : '#b91c1c'};">${formatMoney(net)}</span>
+      </p>
+    </div>
+  </div>`;
+}
+
+async function sendDailySummaryEmail(env) {
+  try {
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Dhaka' });
+
+    const { incomeRows, expenseRows, settings } = await withDb(env, async (conn) => {
+      const [incomeRows] = await conn.query(
+        `SELECT p.amount, i.customer_name as customerName, i.customer_phone as customerPhone,
+                i.vehicle_model as vehicleModel, i.vehicle_registration as vehicleRegistration
+         FROM payments p
+         JOIN invoices i ON p.invoice_id = i.id
+         WHERE p.payment_date = ?
+         ORDER BY p.created_at ASC`,
+        [today]
+      );
+      const [expenseRows] = await conn.query(
+        `SELECT category_name as categoryName, description, amount
+         FROM expenses WHERE date = ? ORDER BY created_at ASC`,
+        [today]
+      );
+      const [settingsRows] = await conn.query('SELECT setting_key, setting_value FROM settings');
+      const settings = {};
+      for (const row of settingsRows) settings[row.setting_key] = row.setting_value;
+      return { incomeRows, expenseRows, settings };
+    });
+
+    const totalIncome = incomeRows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+    const totalExpenses = expenseRows.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
+    const businessName = settings.business_name || 'NextGarage';
+
+    const html = buildDailySummaryEmailHtml({
+      businessName,
+      date: today,
+      incomeRows,
+      expenseRows,
+      totalIncome,
+      totalExpenses,
+    });
+
+    const resendRes = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${env.RESEND_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: `${businessName} <sales@arshicar.com>`,
+        to: DAILY_SUMMARY_RECIPIENTS,
+        subject: `Daily Summary — ${today}`,
+        html,
+      }),
+    });
+    if (!resendRes.ok) {
+      const errData = await resendRes.json().catch(() => ({}));
+      console.error('Daily summary email failed:', errData);
+    }
+  } catch (err) {
+    console.error('Error sending daily summary email:', err);
+  }
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -3136,5 +3261,9 @@ export default {
       });
     }
     return assetRes;
+  },
+
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(sendDailySummaryEmail(env));
   },
 };
