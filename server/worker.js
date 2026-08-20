@@ -2624,23 +2624,54 @@ export default {
         const pMethod = (data.paymentMethod || 'cash').toLowerCase();
 
         const created = await withTransaction(env, async (conn) => {
+          const txType = data.type || 'Other Income';
+          const refType = txType === 'Loan from MD' ? 'md_loan' : 'direct_cash_in';
+          const amount = Number(data.amount) || 0;
+
           await conn.query(
             `INSERT INTO financial_transactions (
               id, date, time, type, category, description, payment_method,
               amount, reference_type, reference_id, notes, created_at
-            ) VALUES (?, ?, ?, 'INCOME', ?, ?, ?, ?, 'direct_cash_in', ?, ?, NOW())`,
+            ) VALUES (?, ?, ?, 'INCOME', ?, ?, ?, ?, ?, ?, ?, NOW())`,
             [
               txId,
               date,
               time,
-              data.type || 'Other Income',
+              txType,
               data.description,
               pMethod,
-              Number(data.amount) || 0,
+              amount,
+              refType,
               data.reference || null,
               data.note || null
             ]
           );
+
+          // If MD Loan received, mirror it into the loans/loan_payments tables
+          // so it also shows up on the Loans tab, not just Cash In.
+          if (txType === 'Loan from MD') {
+            const [loanRows] = await conn.query('SELECT id FROM loans LIMIT 1');
+            let loanId = loanRows.length > 0 ? loanRows[0].id : null;
+            if (!loanId) {
+              loanId = 'loan-md-default';
+              await conn.query('INSERT INTO loans (id, name, loan_type, total_amount, status) VALUES (?, "MD Loan", "md_loan", 0.00, "active")', [loanId]);
+            }
+
+            await conn.query(
+              `INSERT INTO loan_payments (id, loan_id, payment_type, amount, payment_date, payment_time, payment_method, reference, notes, created_at)
+               VALUES (?, ?, 'received', ?, ?, ?, ?, ?, ?, NOW())`,
+              [
+                `lp-${Date.now()}`,
+                loanId,
+                amount,
+                date,
+                time,
+                pMethod,
+                data.reference || null,
+                data.note || data.description || 'Loan Received from MD'
+              ]
+            );
+          }
 
           return {
             id: txId,
