@@ -67,7 +67,7 @@ export const JobCardDetailsPage: React.FC = () => {
     try {
       const updated = await api.updateJobCardStatus(jobCard.id, newStatus);
       if (updated) {
-        setJobCard(updated);
+        setJobCard(prev => (prev ? { ...prev, ...updated } : updated));
         showToast(`Job Card status updated to ${newStatus}`, 'success');
         triggerRefresh();
       }

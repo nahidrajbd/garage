@@ -249,6 +249,13 @@ export const api = {
     });
   },
 
+  async emailInvoice(id: string, email?: string): Promise<{ success: boolean; email: string }> {
+    return request<{ success: boolean; email: string }>(`/invoices/${id}/email`, {
+      method: 'POST',
+      body: JSON.stringify({ email }),
+    });
+  },
+
   async deleteInvoice(id: string): Promise<boolean> {
     await request(`/invoices/${id}`, { method: 'DELETE' });
     return true;

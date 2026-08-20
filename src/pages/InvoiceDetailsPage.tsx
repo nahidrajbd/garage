@@ -1,23 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { 
-  Printer, 
-  ArrowLeft, 
-  CreditCard, 
-  CheckCircle2, 
-  Wrench, 
-  Phone, 
-  MapPin, 
-  User, 
+import {
+  Printer,
+  ArrowLeft,
+  CreditCard,
+  CheckCircle2,
+  Wrench,
+  Phone,
+  MapPin,
+  User,
   Car,
   Receipt,
-  QrCode
+  QrCode,
+  Mail,
+  Send
 } from 'lucide-react';
 import { InvoiceStatusBadge, PaymentMethodBadge } from '../components/common/Badge';
 import { Barcode } from '../components/common/Barcode';
+import { Modal } from '../components/common/Modal';
 import { useApp } from '../context/AppContext';
 import { api } from '../services/api';
-import { Invoice, Settings } from '../types';
+import { Invoice, Settings, Customer } from '../types';
 import { formatBDT, formatDate } from '../utils/formatters';
 import banglaQrImg from '../assets/bangla-qr.jpg';
 
@@ -25,11 +28,16 @@ export const InvoiceDetailsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { openPaymentModal, refreshTrigger } = useApp();
+  const { openPaymentModal, refreshTrigger, showToast } = useApp();
 
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [customer, setCustomer] = useState<Customer | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+  const [emailInput, setEmailInput] = useState('');
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
 
   useEffect(() => {
     const loadInvoice = async () => {
@@ -42,6 +50,10 @@ export const InvoiceDetailsPage: React.FC = () => {
         ]);
         if (inv) {
           setInvoice(inv);
+          if (inv.customerId) {
+            const cust = await api.getCustomerById(inv.customerId);
+            setCustomer(cust || null);
+          }
         }
         if (sett) {
           setSettings(sett);
@@ -54,6 +66,34 @@ export const InvoiceDetailsPage: React.FC = () => {
     };
     loadInvoice();
   }, [id, refreshTrigger]);
+
+  const sendInvoiceEmail = async (email?: string) => {
+    if (!invoice) return;
+    setIsSendingEmail(true);
+    try {
+      const result = await api.emailInvoice(invoice.id, email);
+      showToast(`Invoice emailed to ${result.email}`, 'success');
+      setIsEmailModalOpen(false);
+      setEmailInput('');
+      if (email && customer) {
+        setCustomer({ ...customer, email: customer.email || email });
+      }
+    } catch (err: any) {
+      console.error(err);
+      showToast(err.message || 'Failed to send email', 'error');
+    } finally {
+      setIsSendingEmail(false);
+    }
+  };
+
+  const handleEmailClick = () => {
+    if (customer?.email) {
+      sendInvoiceEmail();
+    } else {
+      setEmailInput('');
+      setIsEmailModalOpen(true);
+    }
+  };
 
   // Auto-trigger print if requested via query param
   useEffect(() => {
@@ -113,6 +153,16 @@ export const InvoiceDetailsPage: React.FC = () => {
               <span>Collect Due ({formatBDT(invoice.due)})</span>
             </button>
           )}
+
+          <button
+            type="button"
+            onClick={handleEmailClick}
+            disabled={isSendingEmail}
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-gray-700 bg-white hover:bg-gray-100 border border-gray-300 rounded-xl transition-colors disabled:opacity-60"
+          >
+            <Mail className="w-4 h-4 text-gray-500" />
+            <span>{isSendingEmail ? 'Sending...' : 'Email Invoice'}</span>
+          </button>
 
           <button
             type="button"
@@ -319,6 +369,54 @@ export const InvoiceDetailsPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Email Address Modal */}
+      <Modal
+        isOpen={isEmailModalOpen}
+        onClose={() => setIsEmailModalOpen(false)}
+        title="Email Invoice"
+        subtitle={`${invoice.customerName} • ${invoice.invoiceNumber}`}
+        maxWidth="sm"
+      >
+        <div className="space-y-3.5">
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1">
+              Customer Email <span className="text-rose-500">*</span>
+            </label>
+            <input
+              type="email"
+              autoFocus
+              required
+              value={emailInput}
+              onChange={e => setEmailInput(e.target.value)}
+              placeholder="e.g. customer@example.com"
+              className="w-full text-sm px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:outline-none"
+            />
+            <p className="text-[11px] text-gray-400 mt-1">
+              We'll save this to the customer's profile for next time.
+            </p>
+          </div>
+
+          <div className="flex justify-end gap-2.5 pt-2 border-t border-gray-100">
+            <button
+              type="button"
+              onClick={() => setIsEmailModalOpen(false)}
+              className="px-4 py-2 text-xs sm:text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => sendInvoiceEmail(emailInput.trim())}
+              disabled={isSendingEmail || !emailInput.trim()}
+              className="inline-flex items-center gap-1.5 px-5 py-2 text-xs sm:text-sm font-semibold text-white bg-[#C1121F] hover:bg-[#9E0E19] rounded-lg transition-colors shadow-xs disabled:opacity-60"
+            >
+              <Send className="w-4 h-4" />
+              <span>{isSendingEmail ? 'Sending...' : 'Send'}</span>
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };

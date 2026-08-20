@@ -31,6 +31,62 @@ const normalizePaymentMethod = (method) => {
   return 'cash';
 };
 
+const escapeHtml = (str) => String(str ?? '').replace(/[&<>"']/g, (c) => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+}[c]));
+
+const formatMoney = (n) => `৳${(Number(n) || 0).toLocaleString('en-BD', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+function buildInvoiceEmailHtml({
+  businessName, footerText, invoiceNumber, date, customerName,
+  vehicleModel, vehicleRegistration, items, subtotal, discount, grandTotal, paid, due,
+}) {
+  const rows = items.map(it => `
+    <tr>
+      <td style="padding:8px 4px; border-bottom:1px solid #eee;">${escapeHtml(it.name)}</td>
+      <td style="padding:8px 4px; border-bottom:1px solid #eee; text-align:center;">${it.quantity}</td>
+      <td style="padding:8px 4px; border-bottom:1px solid #eee; text-align:right;">${formatMoney(it.total)}</td>
+    </tr>`).join('');
+
+  return `
+  <div style="font-family: Arial, Helvetica, sans-serif; max-width: 600px; margin: 0 auto; color:#1f2937;">
+    <div style="background:#C1121F; padding:20px 24px; text-align:center; border-radius:8px 8px 0 0;">
+      <h1 style="color:#fff; margin:0; font-size:20px;">${escapeHtml(businessName)}</h1>
+    </div>
+    <div style="padding:24px; border:1px solid #e5e7eb; border-top:none; border-radius:0 0 8px 8px;">
+      <p style="margin-top:0;">Dear ${escapeHtml(customerName || 'Customer')},</p>
+      <p>Thank you for choosing ${escapeHtml(businessName)}. Please find your invoice details below.</p>
+
+      <table style="width:100%; border-collapse:collapse; margin:16px 0; font-size:14px;">
+        <tr><td style="padding:4px 0; color:#6b7280;">Invoice No.</td><td style="text-align:right; font-weight:bold;">${escapeHtml(invoiceNumber)}</td></tr>
+        <tr><td style="padding:4px 0; color:#6b7280;">Date</td><td style="text-align:right;">${escapeHtml(date)}</td></tr>
+        ${vehicleModel ? `<tr><td style="padding:4px 0; color:#6b7280;">Vehicle</td><td style="text-align:right;">${escapeHtml(vehicleModel)}${vehicleRegistration ? ` (${escapeHtml(vehicleRegistration)})` : ''}</td></tr>` : ''}
+      </table>
+
+      <table style="width:100%; border-collapse:collapse; margin:16px 0; font-size:14px;">
+        <thead>
+          <tr style="border-bottom:2px solid #e5e7eb; text-align:left; color:#6b7280;">
+            <th style="padding:8px 4px;">Service</th>
+            <th style="padding:8px 4px; text-align:center;">Qty</th>
+            <th style="padding:8px 4px; text-align:right;">Amount</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+
+      <table style="width:100%; border-collapse:collapse; margin:16px 0; font-size:14px;">
+        <tr><td style="padding:4px 0; color:#6b7280;">Subtotal</td><td style="text-align:right;">${formatMoney(subtotal)}</td></tr>
+        ${discount > 0 ? `<tr><td style="padding:4px 0; color:#b91c1c;">Discount</td><td style="text-align:right; color:#b91c1c;">- ${formatMoney(discount)}</td></tr>` : ''}
+        <tr><td style="padding:8px 0; font-size:16px; font-weight:bold; border-top:2px solid #e5e7eb;">Grand Total</td><td style="padding:8px 0; text-align:right; font-size:16px; font-weight:bold; color:#C1121F; border-top:2px solid #e5e7eb;">${formatMoney(grandTotal)}</td></tr>
+        <tr><td style="padding:4px 0; color:#047857;">Paid</td><td style="text-align:right; color:#047857;">${formatMoney(paid)}</td></tr>
+        <tr><td style="padding:4px 0; font-weight:bold;">Due</td><td style="text-align:right; font-weight:bold; color:${due > 0 ? '#dc2626' : '#047857'};">${formatMoney(due)}</td></tr>
+      </table>
+
+      ${footerText ? `<p style="margin-top:24px; color:#6b7280; font-size:13px;">${escapeHtml(footerText)}</p>` : ''}
+    </div>
+  </div>`;
+}
+
 // GET all Invoices
 router.get('/', async (req, res) => {
   try {
@@ -437,6 +493,101 @@ router.post('/:id/payments', async (req, res) => {
     res.json(updatedInvoice);
   } catch (error) {
     console.error('Error recording invoice payment:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// EMAIL Invoice
+router.post('/:id/email', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { email } = req.body;
+
+    const [invRows] = await pool.query(
+      `SELECT i.*, DATE_FORMAT(i.date, '%Y-%m-%d') as invDate
+       FROM invoices i WHERE i.id = ? OR i.invoice_number = ?`,
+      [id, id]
+    );
+    if (invRows.length === 0) {
+      return res.status(404).json({ error: 'Invoice not found' });
+    }
+    const inv = invRows[0];
+
+    let targetEmail = email ? String(email).trim() : '';
+    let customer = null;
+    if (inv.customer_id) {
+      const [custRows] = await pool.query('SELECT * FROM customers WHERE id = ?', [inv.customer_id]);
+      customer = custRows[0] || null;
+    }
+    if (!targetEmail && customer?.email) {
+      targetEmail = customer.email;
+    }
+    if (!targetEmail) {
+      return res.status(400).json({ error: 'No email address provided for this customer' });
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(targetEmail)) {
+      return res.status(400).json({ error: 'Please provide a valid email address' });
+    }
+
+    // Persist a newly-provided email onto the customer record for next time
+    if (email && customer && !customer.email) {
+      await pool.query('UPDATE customers SET email = ? WHERE id = ?', [targetEmail, customer.id]);
+    }
+
+    const [items] = await pool.query(
+      `SELECT description as serviceName, description, quantity, unit_price as price, total
+       FROM invoice_items WHERE invoice_id = ? ORDER BY sort_order ASC, created_at ASC`,
+      [inv.id]
+    );
+
+    const [settingsRows] = await pool.query('SELECT setting_key, setting_value FROM settings');
+    const settings = {};
+    for (const row of settingsRows) settings[row.setting_key] = row.setting_value;
+
+    const html = buildInvoiceEmailHtml({
+      businessName: settings.business_name || 'NextGarage',
+      footerText: settings.default_footer_text || '',
+      invoiceNumber: inv.invoice_number,
+      date: inv.invDate,
+      customerName: inv.customer_name,
+      vehicleModel: inv.vehicle_model,
+      vehicleRegistration: inv.vehicle_registration,
+      items: items.map(it => ({
+        name: it.serviceName || it.description || 'Service',
+        quantity: Number(it.quantity) || 1,
+        price: Number(it.price) || 0,
+        total: Number(it.total) || 0,
+      })),
+      subtotal: Number(inv.subtotal) || 0,
+      discount: Number(inv.discount) || 0,
+      grandTotal: Number(inv.grand_total) || 0,
+      paid: Number(inv.paid) || 0,
+      due: Number(inv.due) || 0,
+    });
+
+    const resendRes = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: `${settings.business_name || 'NextGarage'} <onboarding@resend.dev>`,
+        to: [targetEmail],
+        reply_to: settings.email || undefined,
+        subject: `Invoice ${inv.invoice_number} from ${settings.business_name || 'NextGarage'}`,
+        html,
+      }),
+    });
+    const resendData = await resendRes.json();
+    if (!resendRes.ok) {
+      console.error('Resend API error:', resendData);
+      return res.status(502).json({ error: resendData.message || 'Failed to send email' });
+    }
+
+    res.json({ success: true, email: targetEmail });
+  } catch (error) {
+    console.error('Error emailing invoice:', error);
     res.status(500).json({ error: error.message });
   }
 });

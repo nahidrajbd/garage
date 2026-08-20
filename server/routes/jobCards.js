@@ -316,8 +316,49 @@ router.patch('/:id/status', async (req, res) => {
     const { status } = req.body;
     const dbStatus = statusMapToDb[status] || status.toLowerCase();
 
-    await pool.query('UPDATE job_cards SET status = ? WHERE id = ?', [dbStatus, id]);
-    res.json({ id, status });
+    await pool.query('UPDATE job_cards SET status = ?, updated_at = NOW() WHERE id = ?', [dbStatus, id]);
+
+    const [rows] = await pool.query(
+      `SELECT j.id, j.job_card_number as jobCardNumber, j.customer_id as customerId, j.vehicle_id as vehicleId,
+              j.customer_name as customerName, j.customer_phone as customerPhone,
+              j.vehicle_registration as vehicleRegistration, j.vehicle_model as vehicleModel,
+              j.mileage, DATE_FORMAT(j.date, '%Y-%m-%d') as date,
+              DATE_FORMAT(j.expected_delivery_date, '%Y-%m-%d') as expectedDeliveryDate,
+              j.status, j.customer_complaint as customerComplaint, j.vehicle_condition as vehicleCondition,
+              j.assigned_to as assignedTo, j.notes,
+              j.quotation_id as quotationId, q.quotation_number as quotationNumber,
+              j.invoice_id as invoiceId, i.invoice_number as invoiceNumber,
+              j.created_at as createdAt, j.updated_at as updatedAt
+       FROM job_cards j
+       LEFT JOIN quotations q ON j.quotation_id = q.id
+       LEFT JOIN invoices i ON j.invoice_id = i.id
+       WHERE j.id = ?`,
+      [id]
+    );
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Job Card not found' });
+    }
+
+    const jc = rows[0];
+    const [items] = await pool.query(
+      `SELECT id, job_card_id as jobCardId, service_name as serviceName, description
+       FROM job_card_items WHERE job_card_id = ?`,
+      [jc.id]
+    );
+    const [photos] = await pool.query(
+      `SELECT id, job_card_id as jobCardId, photo_type as photoType, file_path as filePath
+       FROM job_card_photos WHERE job_card_id = ?`,
+      [jc.id]
+    );
+
+    res.json({
+      ...jc,
+      status: statusMapToFrontend[jc.status] || 'In Progress',
+      requiredWork: items || [],
+      beforePhotos: photos.filter(p => p.photoType === 'before').map(p => p.filePath),
+      afterPhotos: photos.filter(p => p.photoType === 'after').map(p => p.filePath),
+      createdAt: typeof jc.createdAt === 'string' ? jc.createdAt : new Date(jc.createdAt).toISOString()
+    });
   } catch (error) {
     console.error('Error updating status:', error);
     res.status(500).json({ error: error.message });
