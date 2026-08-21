@@ -3,7 +3,7 @@ import { NavLink } from 'react-router-dom';
 import {
   Home,
   LayoutDashboard,
-  UserPlus,
+  MessageCircle,
   ClipboardCheck,
   ClipboardList,
   FileText,
@@ -40,7 +40,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onNavClick }) => {
   const navItems = [
     { label: 'Home', path: '/', icon: Home },
     { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-    { label: 'Leads', path: '/leads', icon: UserPlus },
+    { label: 'Messages', path: '/messages', icon: MessageCircle },
     { label: 'Job Cards', path: '/job-cards', icon: ClipboardCheck },
     { label: 'Quotations', path: '/quotations', icon: ClipboardList },
     { label: 'Invoices', path: '/invoices', icon: FileText },
