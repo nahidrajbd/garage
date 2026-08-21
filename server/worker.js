@@ -2,6 +2,68 @@ import mysql from 'mysql2/promise';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
+const PRIVACY_POLICY_HTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Privacy Policy - Arshi Automobile & Car Hub</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; max-width: 760px; margin: 0 auto; padding: 40px 20px 80px; color: #1E293B; line-height: 1.65; background: #F8FAFC; }
+  h1 { font-size: 1.6rem; margin-bottom: 4px; }
+  h2 { font-size: 1.1rem; margin-top: 2rem; color: #1E293B; }
+  p, li { color: #334155; }
+  .updated { color: #64748B; font-size: 0.85rem; margin-top: 0; margin-bottom: 2rem; }
+  .box { background: #fff; border: 1px solid #E2E8F0; border-radius: 12px; padding: 32px; }
+  a { color: #2563EB; }
+</style>
+</head>
+<body>
+  <div class="box">
+    <h1>Privacy Policy</h1>
+    <p class="updated">Arshi Automobile &amp; Car Hub &mdash; NextGarage system &mdash; Last updated: August 21, 2026</p>
+
+    <h2>1. Introduction</h2>
+    <p>NextGarage is the internal business management system used by Arshi Automobile &amp; Car Hub ("we", "us", "our") to manage customer service records, including job cards, quotations, invoices, and customer inquiries. This policy explains how we handle information, including information received through our Facebook Page's Messenger inbox.</p>
+
+    <h2>2. Information We Collect</h2>
+    <p>When a customer sends a message to our Facebook Page (Arshi Automobile &amp; Car Hub), we receive:</p>
+    <ul>
+      <li>Your name and basic profile information as provided by Facebook</li>
+      <li>The content of the messages you send us</li>
+      <li>A Facebook-assigned Page-Scoped ID that lets us reply to your conversation on that Page &mdash; this identifier only works with our Page and does not give us access to your Facebook account, friends list, posts, or any other Facebook data</li>
+    </ul>
+    <p>We may also separately hold information you give us directly, such as your phone number, vehicle details, and service history, when you visit our workshop or contact us by phone.</p>
+
+    <h2>3. How We Use Your Information</h2>
+    <p>We use this information to respond to your inquiry, create and manage a service record if you book a repair, quotation, or purchase, and to follow up with you regarding appointments or ongoing service. We do not use your information for advertising, do not sell it, and do not share it with third parties except where required by law.</p>
+
+    <h2>4. Data Storage and Security</h2>
+    <p>Information is stored in a secured database accessible only to authorized staff of Arshi Automobile &amp; Car Hub, behind an individual staff login.</p>
+
+    <h2>5. Data Retention</h2>
+    <p>We retain conversation and service records for as long as reasonably necessary for business and customer service purposes, consistent with standard recordkeeping practices for a vehicle service business.</p>
+
+    <h2>6. Your Rights</h2>
+    <p>You may contact us at any time to ask what information we hold about you, to correct it, or to request that it be deleted, using the contact details below.</p>
+
+    <h2>7. Children's Privacy</h2>
+    <p>Our services are directed at adults seeking vehicle servicing and are not directed at children under 13.</p>
+
+    <h2>8. Changes to This Policy</h2>
+    <p>We may update this policy from time to time. The "last updated" date above reflects the most recent revision.</p>
+
+    <h2>9. Contact Us</h2>
+    <p>
+      Arshi Automobile &amp; Car Hub<br>
+      Bhadra Mor, Station Road, Rajshahi, Bangladesh<br>
+      Phone: <a href="tel:01712110902">01712110902</a> / <a href="tel:01712345678">01712345678</a><br>
+      Email: <a href="mailto:arshi.autohub@gmail.com">arshi.autohub@gmail.com</a>
+    </p>
+  </div>
+</body>
+</html>`;
+
 async function withDb(env, fn) {
   const conn = await mysql.createConnection({
     host: env.DB_HOST || '165.99.74.72',
@@ -424,6 +486,16 @@ export default {
 
     if (method === 'OPTIONS') {
       return new Response(null, { headers: corsHeaders });
+    }
+
+    // ----------------------------------------------------
+    // PRIVACY POLICY (public, no auth - required for Meta App Review)
+    // ----------------------------------------------------
+    if (path === '/privacy-policy' && method === 'GET') {
+      return new Response(PRIVACY_POLICY_HTML, {
+        status: 200,
+        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      });
     }
 
     // ----------------------------------------------------
