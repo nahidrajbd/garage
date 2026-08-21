@@ -244,11 +244,11 @@ export const InvoiceDetailsPage: React.FC = () => {
           <table className="w-full text-left text-xs sm:text-sm">
             <thead>
               <tr className="border-b-2 border-gray-300 text-gray-700 text-xs font-bold uppercase tracking-wider">
-                <th className="py-2.5 px-2 w-10 text-center">#</th>
-                <th className="py-2.5 px-2">Service Description</th>
-                <th className="py-2.5 px-2 w-24 text-center">Qty</th>
-                <th className="py-2.5 px-2 w-28 text-right">Rate</th>
-                <th className="py-2.5 px-2 w-32 text-right">Amount</th>
+                <th className="py-1.5 px-2 w-10 text-center">#</th>
+                <th className="py-1.5 px-2">Service Description</th>
+                <th className="py-1.5 px-2 w-24 text-center">Qty</th>
+                <th className="py-1.5 px-2 w-28 text-right">Rate</th>
+                <th className="py-1.5 px-2 w-32 text-right">Amount</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
@@ -256,19 +256,19 @@ export const InvoiceDetailsPage: React.FC = () => {
                 const total = item.price * (item.quantity || 1);
                 return (
                   <tr key={item.id} className="text-gray-800">
-                    <td className="py-3 px-2 text-center text-gray-400 font-mono text-xs">
+                    <td className="py-1.5 px-2 text-center text-gray-400 font-mono text-xs">
                       {idx + 1}
                     </td>
-                    <td className="py-3 px-2 font-medium">
+                    <td className="py-1.5 px-2 font-medium">
                       {item.serviceName}
                     </td>
-                    <td className="py-3 px-2 text-center font-mono">
+                    <td className="py-1.5 px-2 text-center font-mono">
                       {item.quantity || 1}
                     </td>
-                    <td className="py-3 px-2 text-right font-mono text-gray-600">
+                    <td className="py-1.5 px-2 text-right font-mono text-gray-600">
                       {formatBDT(item.price)}
                     </td>
-                    <td className="py-3 px-2 text-right font-bold font-mono text-gray-900">
+                    <td className="py-1.5 px-2 text-right font-bold font-mono text-gray-900">
                       {formatBDT(total)}
                     </td>
                   </tr>
