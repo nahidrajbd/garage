@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   Car,
   MessageSquare,
+  MessageCircle,
   Clock,
   XCircle,
   Send,
@@ -140,6 +141,17 @@ export const LeadDetailsPage: React.FC = () => {
     if (!lead) return [];
     return [...lead.followUps].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   }, [lead]);
+
+  const messengerThread = useMemo(() => sortedFollowUps.filter(fu => fu.channel === 'facebook'), [sortedFollowUps]);
+  const callHistory = useMemo(() => sortedFollowUps.filter(fu => fu.channel !== 'facebook'), [sortedFollowUps]);
+
+  const formatTime = (iso: string): string => {
+    try {
+      return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return '';
+    }
+  };
 
   const openFollowUpModal = () => {
     if (!lead) return;
@@ -319,34 +331,64 @@ export const LeadDetailsPage: React.FC = () => {
         )}
       </div>
 
-      {/* Reply on Facebook Messenger */}
+      {/* Messenger Conversation */}
       {lead.fbPsid && (
-        <div className="bg-white p-5 rounded-2xl border border-gray-200/80 shadow-2xs space-y-2">
-          <div className="flex items-center gap-2">
-            <Send className="w-4 h-4 text-[#C1121F]" />
-            <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider font-heading">Reply on Facebook</h3>
+        <div className="bg-white rounded-2xl border border-gray-200/80 shadow-2xs overflow-hidden">
+          <div className="flex items-center gap-2 px-5 pt-5 pb-3 border-b border-gray-100">
+            <MessageCircle className="w-4 h-4 text-[#C1121F]" />
+            <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider font-heading">Messenger Conversation</h3>
           </div>
-          <div className="flex flex-col sm:flex-row gap-2">
-            <textarea
-              rows={2}
-              value={fbReplyText}
-              onChange={e => setFbReplyText(e.target.value)}
-              placeholder="Type a reply to send on Messenger..."
-              className="flex-1 text-sm px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-red-500 focus:outline-none"
-            />
-            <button
-              type="button"
-              onClick={handleSendFacebookReply}
-              disabled={isSendingReply || !fbReplyText.trim()}
-              className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-[#C1121F] hover:bg-[#9E0E19] rounded-lg shadow-xs transition-colors disabled:opacity-50 shrink-0"
-            >
-              <Send className="w-4 h-4" />
-              <span>{isSendingReply ? 'Sending...' : 'Send'}</span>
-            </button>
+
+          {messengerThread.length === 0 ? (
+            <p className="text-xs text-gray-500 text-center py-8">No messages yet.</p>
+          ) : (
+            <div className="px-5 py-4 space-y-3 max-h-96 overflow-y-auto bg-gray-50/60">
+              {messengerThread.map(fu => (
+                <div key={fu.id} className={`flex ${fu.direction === 'outbound' ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[75%] px-3.5 py-2 rounded-2xl text-sm ${
+                    fu.direction === 'outbound'
+                      ? 'bg-[#C1121F] text-white rounded-br-sm'
+                      : 'bg-white border border-gray-200 text-gray-800 rounded-bl-sm'
+                  }`}>
+                    <p className="whitespace-pre-wrap break-words">{fu.note}</p>
+                    <p className={`text-[10px] mt-1 ${fu.direction === 'outbound' ? 'text-red-100' : 'text-gray-400'}`}>
+                      {fu.direction === 'outbound' ? fu.staffId : lead.customerName} &middot; {formatTime(fu.createdAt)}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="p-4 border-t border-gray-100 space-y-1.5">
+            <div className="flex gap-2">
+              <textarea
+                rows={1}
+                value={fbReplyText}
+                onChange={e => setFbReplyText(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendFacebookReply();
+                  }
+                }}
+                placeholder="Type a reply to send on Messenger..."
+                className="flex-1 text-sm px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-red-500 focus:outline-none resize-none"
+              />
+              <button
+                type="button"
+                onClick={handleSendFacebookReply}
+                disabled={isSendingReply || !fbReplyText.trim()}
+                className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-[#C1121F] hover:bg-[#9E0E19] rounded-lg shadow-xs transition-colors disabled:opacity-50 shrink-0"
+              >
+                <Send className="w-4 h-4" />
+                <span>{isSendingReply ? 'Sending...' : 'Send'}</span>
+              </button>
+            </div>
+            <p className="text-[11px] text-gray-400">
+              Facebook only allows replies within 24 hours of the customer's last message.
+            </p>
           </div>
-          <p className="text-[11px] text-gray-400">
-            Facebook only allows replies within 24 hours of the customer's last message.
-          </p>
         </div>
       )}
 
@@ -368,15 +410,15 @@ export const LeadDetailsPage: React.FC = () => {
           </button>
         </div>
 
-        {sortedFollowUps.length === 0 ? (
+        {callHistory.length === 0 ? (
           <p className="text-xs text-gray-500 text-center py-6">No follow-ups recorded yet.</p>
         ) : (
           <div className="space-y-0">
-            {sortedFollowUps.map((fu, idx) => (
+            {callHistory.map((fu, idx) => (
               <div key={fu.id} className="flex gap-3">
                 <div className="flex flex-col items-center">
                   <div className="w-2.5 h-2.5 rounded-full bg-[#C1121F] mt-1.5 shrink-0" />
-                  {idx < sortedFollowUps.length - 1 && <div className="w-px flex-1 bg-gray-200" />}
+                  {idx < callHistory.length - 1 && <div className="w-px flex-1 bg-gray-200" />}
                 </div>
                 <div className="pb-5 min-w-0">
                   <p className="text-xs font-bold text-gray-900">

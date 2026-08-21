@@ -53,6 +53,8 @@ function formatFollowUp(fu) {
     contactDate: fu.contactDate,
     status: fu.status,
     note: fu.note || '',
+    channel: fu.channel || undefined,
+    direction: fu.direction || 'outbound',
     nextFollowUpDate: fu.nextFollowUpDate || undefined,
     createdAt: typeof fu.createdAt === 'string' ? fu.createdAt : new Date(fu.createdAt).toISOString(),
   };
@@ -78,7 +80,7 @@ router.get('/', async (req, res) => {
     const [followUps] = await pool.query(
       `SELECT id, lead_id as leadId, staff_id as staffId,
               DATE_FORMAT(contact_date, '%Y-%m-%d') as contactDate,
-              status, note, DATE_FORMAT(next_follow_up_date, '%Y-%m-%d') as nextFollowUpDate,
+              status, note, channel, direction, DATE_FORMAT(next_follow_up_date, '%Y-%m-%d') as nextFollowUpDate,
               created_at as createdAt
        FROM lead_follow_ups ORDER BY created_at ASC`
     );
@@ -108,7 +110,7 @@ router.get('/:id', async (req, res) => {
     const [followUps] = await pool.query(
       `SELECT id, lead_id as leadId, staff_id as staffId,
               DATE_FORMAT(contact_date, '%Y-%m-%d') as contactDate,
-              status, note, DATE_FORMAT(next_follow_up_date, '%Y-%m-%d') as nextFollowUpDate,
+              status, note, channel, direction, DATE_FORMAT(next_follow_up_date, '%Y-%m-%d') as nextFollowUpDate,
               created_at as createdAt
        FROM lead_follow_ups WHERE lead_id = ? ORDER BY created_at ASC`,
       [rows[0].id]
@@ -206,7 +208,7 @@ router.put('/:id', async (req, res) => {
     const [followUps] = await pool.query(
       `SELECT id, lead_id as leadId, staff_id as staffId,
               DATE_FORMAT(contact_date, '%Y-%m-%d') as contactDate,
-              status, note, DATE_FORMAT(next_follow_up_date, '%Y-%m-%d') as nextFollowUpDate,
+              status, note, channel, direction, DATE_FORMAT(next_follow_up_date, '%Y-%m-%d') as nextFollowUpDate,
               created_at as createdAt
        FROM lead_follow_ups WHERE lead_id = ? ORDER BY created_at ASC`,
       [id]
@@ -254,7 +256,7 @@ router.post('/:id/follow-ups', async (req, res) => {
     const [followUps] = await pool.query(
       `SELECT id, lead_id as leadId, staff_id as staffId,
               DATE_FORMAT(contact_date, '%Y-%m-%d') as contactDate,
-              status, note, DATE_FORMAT(next_follow_up_date, '%Y-%m-%d') as nextFollowUpDate,
+              status, note, channel, direction, DATE_FORMAT(next_follow_up_date, '%Y-%m-%d') as nextFollowUpDate,
               created_at as createdAt
        FROM lead_follow_ups WHERE lead_id = ? ORDER BY created_at ASC`,
       [id]

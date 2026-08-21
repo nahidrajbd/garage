@@ -89,6 +89,21 @@ async function migrate() {
       console.log('✅ Made leads.phone nullable (Facebook leads may have no phone).');
     }
 
+    // Ensure lead_follow_ups can distinguish Messenger messages from staff call logs
+    const [fuCols] = await connection.query(`
+      SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'lead_follow_ups'
+    `);
+    const fuColNames = fuCols.map(c => c.COLUMN_NAME);
+    if (!fuColNames.includes('channel')) {
+      await connection.query('ALTER TABLE lead_follow_ups ADD COLUMN channel VARCHAR(20) NULL AFTER note');
+      console.log('✅ Added lead_follow_ups.channel column.');
+    }
+    if (!fuColNames.includes('direction')) {
+      await connection.query(`ALTER TABLE lead_follow_ups ADD COLUMN direction ENUM('inbound', 'outbound') NOT NULL DEFAULT 'outbound' AFTER channel`);
+      console.log('✅ Added lead_follow_ups.direction column.');
+    }
+
     // Seed Settings
     console.log('🔄 Checking settings...');
     const defaultSettings = [

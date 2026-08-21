@@ -418,6 +418,8 @@ CREATE TABLE IF NOT EXISTS lead_follow_ups (
   contact_date DATE NOT NULL,
   status VARCHAR(50) NOT NULL,
   note TEXT NULL,
+  channel VARCHAR(20) NULL,
+  direction ENUM('inbound', 'outbound') NOT NULL DEFAULT 'outbound',
   next_follow_up_date DATE NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   INDEX idx_lead_fu_lead (lead_id),

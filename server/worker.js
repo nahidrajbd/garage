@@ -145,9 +145,9 @@ async function handleIncomingFacebookMessage(env, psid, text) {
       const lead = existing[0];
       const fuId = `fu-${lead.id}-${Date.now()}`;
       await conn.query(
-        `INSERT INTO lead_follow_ups (id, lead_id, staff_id, contact_date, status, note, created_at)
-         VALUES (?, ?, 'Customer (Facebook)', ?, ?, ?, NOW())`,
-        [fuId, lead.id, today, lead.status, `Facebook message: "${text}"`]
+        `INSERT INTO lead_follow_ups (id, lead_id, staff_id, contact_date, status, note, channel, direction, created_at)
+         VALUES (?, ?, 'Customer (Facebook)', ?, ?, ?, 'facebook', 'inbound', NOW())`,
+        [fuId, lead.id, today, lead.status, text]
       );
       const terminal = lead.status === 'Service Taken' || lead.status === 'Not Interested' || lead.status === 'Lost';
       if (!terminal) {
@@ -184,9 +184,16 @@ async function handleIncomingFacebookMessage(env, psid, text) {
     const leadId = `lead-${Date.now()}`;
 
     await conn.query(
-      `INSERT INTO leads (id, lead_number, customer_name, source, inquiry, status, fb_psid, lead_date, next_follow_up_date, created_at)
-       VALUES (?, ?, ?, 'Facebook', ?, 'New', ?, ?, ?, NOW())`,
-      [leadId, leadNumber, customerName, text, psid, today, today]
+      `INSERT INTO leads (id, lead_number, customer_name, source, inquiry, status, fb_psid, lead_date, last_contact_date, next_follow_up_date, created_at)
+       VALUES (?, ?, ?, 'Facebook', ?, 'New', ?, ?, ?, ?, NOW())`,
+      [leadId, leadNumber, customerName, text, psid, today, today, today]
+    );
+
+    const fuId = `fu-${leadId}-${Date.now()}`;
+    await conn.query(
+      `INSERT INTO lead_follow_ups (id, lead_id, staff_id, contact_date, status, note, channel, direction, created_at)
+       VALUES (?, ?, 'Customer (Facebook)', ?, 'New', ?, 'facebook', 'inbound', NOW())`,
+      [fuId, leadId, today, text]
     );
   });
 }
@@ -1210,6 +1217,8 @@ export default {
       contactDate: typeof fu.contact_date === 'string' ? fu.contact_date : new Date(fu.contact_date).toISOString().split('T')[0],
       status: fu.status,
       note: fu.note || '',
+      channel: fu.channel || undefined,
+      direction: fu.direction || 'outbound',
       nextFollowUpDate: fu.next_follow_up_date ? (typeof fu.next_follow_up_date === 'string' ? fu.next_follow_up_date : new Date(fu.next_follow_up_date).toISOString().split('T')[0]) : undefined,
       createdAt: typeof fu.created_at === 'string' ? fu.created_at : new Date(fu.created_at).toISOString(),
     });
@@ -1437,9 +1446,9 @@ export default {
 
           const fuId = `fu-${id}-${Date.now()}`;
           await conn.query(
-            `INSERT INTO lead_follow_ups (id, lead_id, staff_id, contact_date, status, note, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, NOW())`,
-            [fuId, id, staffName, new Date().toISOString().split('T')[0], leadRow.status, `Replied via Facebook: "${text}"`]
+            `INSERT INTO lead_follow_ups (id, lead_id, staff_id, contact_date, status, note, channel, direction, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, 'facebook', 'outbound', NOW())`,
+            [fuId, id, staffName, new Date().toISOString().split('T')[0], leadRow.status, text]
           );
           await conn.query('UPDATE leads SET last_contact_date = ? WHERE id = ?', [new Date().toISOString().split('T')[0], id]);
 

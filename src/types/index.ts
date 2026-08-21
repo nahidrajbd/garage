@@ -351,6 +351,8 @@ export interface FollowUp {
   contactDate: string;   // YYYY-MM-DD
   status: LeadStatus;    // status the lead was set to as a result of this follow-up
   note: string;
+  channel?: 'facebook';       // set when this entry is a Messenger message, not a call log
+  direction?: 'inbound' | 'outbound'; // inbound = from the customer, outbound = from staff
   nextFollowUpDate?: string; // YYYY-MM-DD
   createdAt: string;
 }
