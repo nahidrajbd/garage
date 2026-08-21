@@ -21,7 +21,7 @@ export const CreateLeadPage: React.FC = () => {
       const existing = await leadsService.getLeadById(id);
       if (existing) {
         setCustomerName(existing.customerName);
-        setPhone(existing.phone);
+        setPhone(existing.phone || '');
         setVehicleModel(existing.vehicleModel || '');
         setInquiry(existing.inquiry);
       }

@@ -56,6 +56,79 @@ function getUser(request, env) {
   }
 }
 
+// Confirms a Messenger webhook POST body was really sent by Facebook,
+// by recomputing the HMAC-SHA256 signature with the App Secret.
+async function verifyFacebookSignature(rawBody, signatureHeader, appSecret) {
+  if (!signatureHeader || !signatureHeader.startsWith('sha256=') || !appSecret) return false;
+  const expectedHex = signatureHeader.slice(7);
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey('raw', enc.encode(appSecret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const sigBuffer = await crypto.subtle.sign('HMAC', key, enc.encode(rawBody));
+  const computedHex = Array.from(new Uint8Array(sigBuffer)).map((b) => b.toString(16).padStart(2, '0')).join('');
+  if (computedHex.length !== expectedHex.length) return false;
+  let mismatch = 0;
+  for (let i = 0; i < computedHex.length; i++) {
+    mismatch |= computedHex.charCodeAt(i) ^ expectedHex.charCodeAt(i);
+  }
+  return mismatch === 0;
+}
+
+// Turns one incoming Messenger message into a Lead (or logs it against an existing one)
+async function handleIncomingFacebookMessage(env, psid, text) {
+  await withTransaction(env, async (conn) => {
+    const today = new Date().toISOString().split('T')[0];
+    const [existing] = await conn.query('SELECT * FROM leads WHERE fb_psid = ?', [psid]);
+
+    if (existing.length > 0) {
+      const lead = existing[0];
+      const fuId = `fu-${lead.id}-${Date.now()}`;
+      await conn.query(
+        `INSERT INTO lead_follow_ups (id, lead_id, staff_id, contact_date, status, note, created_at)
+         VALUES (?, ?, 'Customer (Facebook)', ?, ?, ?, NOW())`,
+        [fuId, lead.id, today, lead.status, `Facebook message: "${text}"`]
+      );
+      const terminal = lead.status === 'Service Taken' || lead.status === 'Not Interested' || lead.status === 'Lost';
+      if (!terminal) {
+        await conn.query('UPDATE leads SET last_contact_date = ?, next_follow_up_date = ? WHERE id = ?', [today, today, lead.id]);
+      } else {
+        await conn.query('UPDATE leads SET last_contact_date = ? WHERE id = ?', [today, lead.id]);
+      }
+      return;
+    }
+
+    // First message from this person - create a new lead
+    let customerName = 'Facebook User';
+    try {
+      const profileRes = await fetch(
+        `https://graph.facebook.com/${psid}?fields=first_name,last_name&access_token=${encodeURIComponent(env.FB_PAGE_ACCESS_TOKEN)}`
+      );
+      if (profileRes.ok) {
+        const profile = await profileRes.json();
+        const name = [profile.first_name, profile.last_name].filter(Boolean).join(' ');
+        if (name) customerName = name;
+      }
+    } catch {
+      // Keep the generic fallback name - Graph API profile lookups aren't always available
+    }
+
+    const [existingLeads] = await conn.query('SELECT lead_number FROM leads');
+    let maxSeq = 0;
+    for (const r of existingLeads) {
+      const m = r.lead_number.match(/(\d+)$/);
+      const seq = m ? parseInt(m[1], 10) : 0;
+      if (seq > maxSeq) maxSeq = seq;
+    }
+    const leadNumber = `LD-${String(maxSeq + 1).padStart(4, '0')}`;
+    const leadId = `lead-${Date.now()}`;
+
+    await conn.query(
+      `INSERT INTO leads (id, lead_number, customer_name, source, inquiry, status, fb_psid, lead_date, next_follow_up_date, created_at)
+       VALUES (?, ?, ?, 'Facebook', ?, 'New', ?, ?, ?, NOW())`,
+      [leadId, leadNumber, customerName, text, psid, today, today]
+    );
+  });
+}
+
 function jsonResponse(data, status = 200, corsHeaders) {
   return new Response(JSON.stringify(data), {
     status,
@@ -1033,10 +1106,11 @@ export default {
       id: l.id,
       leadNumber: l.lead_number,
       customerName: l.customer_name,
-      phone: l.phone,
+      phone: l.phone || undefined,
       source: l.source,
       inquiry: l.inquiry || '',
       status: l.status,
+      fbPsid: l.fb_psid || undefined,
       leadDate: typeof l.lead_date === 'string' ? l.lead_date : new Date(l.lead_date).toISOString().split('T')[0],
       lastContactDate: l.last_contact_date ? (typeof l.last_contact_date === 'string' ? l.last_contact_date : new Date(l.last_contact_date).toISOString().split('T')[0]) : undefined,
       nextFollowUpDate: l.next_follow_up_date ? (typeof l.next_follow_up_date === 'string' ? l.next_follow_up_date : new Date(l.next_follow_up_date).toISOString().split('T')[0]) : undefined,
@@ -1147,7 +1221,7 @@ export default {
           vehicleModel: 'vehicle_model', customerId: 'customer_id', vehicleId: 'vehicle_id',
           jobCardId: 'job_card_id', jobCardNumber: 'job_card_number', quotationId: 'quotation_id',
           quotationNumber: 'quotation_number', invoiceId: 'invoice_id', invoiceNumber: 'invoice_number',
-          notes: 'notes',
+          notes: 'notes', fbPsid: 'fb_psid',
         };
         const lead = await withDb(env, async (conn) => {
           const updates = [];
@@ -1249,6 +1323,109 @@ export default {
       } catch (err) {
         return jsonResponse({ error: err.message }, 500, corsHeaders);
       }
+    }
+
+    // REPLY to a lead on Facebook Messenger
+    if (path.match(/^\/api\/leads\/[^/]+\/reply$/) && method === 'POST') {
+      try {
+        const id = path.split('/')[3];
+        const body = await request.json();
+        const text = (body.text || '').trim();
+        if (!text) {
+          return jsonResponse({ error: 'Reply text is required' }, 400, corsHeaders);
+        }
+        if (!env.FB_PAGE_ACCESS_TOKEN) {
+          return jsonResponse({ error: 'Facebook is not connected yet' }, 400, corsHeaders);
+        }
+
+        const user = getUser(request, env);
+        const staffName = user?.name || user?.username || 'Staff';
+
+        const lead = await withTransaction(env, async (conn) => {
+          const [rows] = await conn.query('SELECT * FROM leads WHERE id = ?', [id]);
+          if (rows.length === 0) return null;
+          const leadRow = rows[0];
+          if (!leadRow.fb_psid) {
+            throw new Error('This lead has no linked Facebook conversation to reply to.');
+          }
+
+          const fbRes = await fetch(`https://graph.facebook.com/v21.0/me/messages?access_token=${encodeURIComponent(env.FB_PAGE_ACCESS_TOKEN)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              recipient: { id: leadRow.fb_psid },
+              messaging_type: 'RESPONSE',
+              message: { text },
+            }),
+          });
+          const fbData = await fbRes.json().catch(() => ({}));
+          if (!fbRes.ok) {
+            throw new Error(fbData?.error?.message || 'Failed to send message via Facebook');
+          }
+
+          const fuId = `fu-${id}-${Date.now()}`;
+          await conn.query(
+            `INSERT INTO lead_follow_ups (id, lead_id, staff_id, contact_date, status, note, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, NOW())`,
+            [fuId, id, staffName, new Date().toISOString().split('T')[0], leadRow.status, `Replied via Facebook: "${text}"`]
+          );
+          await conn.query('UPDATE leads SET last_contact_date = ? WHERE id = ?', [new Date().toISOString().split('T')[0], id]);
+
+          const [updatedRows] = await conn.query('SELECT * FROM leads WHERE id = ?', [id]);
+          const [fus] = await conn.query('SELECT * FROM lead_follow_ups WHERE lead_id = ? ORDER BY created_at ASC', [id]);
+          return formatLeadRow(updatedRows[0], fus.map(formatFollowUpRow));
+        });
+
+        if (!lead) return jsonResponse({ error: 'Lead not found' }, 404, corsHeaders);
+        return jsonResponse(lead, 200, corsHeaders);
+      } catch (err) {
+        return jsonResponse({ error: err.message }, 500, corsHeaders);
+      }
+    }
+
+    // ----------------------------------------------------
+    // FACEBOOK MESSENGER WEBHOOK
+    // ----------------------------------------------------
+
+    // Verification handshake (Meta calls this once when you click "Verify and save")
+    if (path === '/api/facebook/webhook' && method === 'GET') {
+      const mode = url.searchParams.get('hub.mode');
+      const token = url.searchParams.get('hub.verify_token');
+      const challenge = url.searchParams.get('hub.challenge');
+      if (mode === 'subscribe' && token === env.FB_VERIFY_TOKEN) {
+        return new Response(challenge || '', { status: 200, headers: { 'Content-Type': 'text/plain' } });
+      }
+      return new Response('Forbidden', { status: 403 });
+    }
+
+    // Incoming messages
+    if (path === '/api/facebook/webhook' && method === 'POST') {
+      const rawBody = await request.text();
+
+      // Verify the request genuinely came from Facebook
+      const signature = request.headers.get('X-Hub-Signature-256');
+      const validSignature = await verifyFacebookSignature(rawBody, signature, env.FB_APP_SECRET);
+      if (!validSignature) {
+        return new Response('Invalid signature', { status: 403 });
+      }
+
+      try {
+        const payload = JSON.parse(rawBody);
+        if (payload.object === 'page') {
+          for (const entry of payload.entry || []) {
+            for (const event of entry.messaging || []) {
+              // Skip echoes (our own outgoing messages bouncing back), and non-text events
+              if (event.message?.is_echo || !event.message?.text || !event.sender?.id) continue;
+              await handleIncomingFacebookMessage(env, event.sender.id, event.message.text);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Facebook webhook processing error:', err);
+      }
+
+      // Always ack quickly so Facebook doesn't retry
+      return new Response('EVENT_RECEIVED', { status: 200 });
     }
 
     // ----------------------------------------------------

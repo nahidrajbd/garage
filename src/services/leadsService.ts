@@ -51,4 +51,6 @@ export const leadsService = {
   ): Promise<Lead | null> => api.addLeadFollowUp(leadId, data),
 
   convertLeadToCustomer: (leadId: string): Promise<Customer | null> => api.convertLeadToCustomer(leadId),
+
+  sendFacebookReply: (leadId: string, text: string): Promise<Lead | null> => api.replyToLeadOnFacebook(leadId, text),
 };

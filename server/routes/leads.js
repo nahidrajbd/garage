@@ -5,7 +5,7 @@ const router = express.Router();
 
 const LEAD_SELECT = `
   SELECT l.id, l.lead_number as leadNumber, l.customer_name as customerName, l.phone,
-         l.source, l.inquiry, l.status,
+         l.source, l.inquiry, l.status, l.fb_psid as fbPsid,
          DATE_FORMAT(l.lead_date, '%Y-%m-%d') as leadDate,
          DATE_FORMAT(l.last_contact_date, '%Y-%m-%d') as lastContactDate,
          DATE_FORMAT(l.next_follow_up_date, '%Y-%m-%d') as nextFollowUpDate,
@@ -23,6 +23,8 @@ function formatLead(row, followUps) {
   return {
     ...row,
     inquiry: row.inquiry || '',
+    phone: row.phone || undefined,
+    fbPsid: row.fbPsid || undefined,
     lastContactDate: row.lastContactDate || undefined,
     nextFollowUpDate: row.nextFollowUpDate || undefined,
     visitDate: row.visitDate || undefined,
@@ -181,6 +183,7 @@ router.put('/:id', async (req, res) => {
       invoiceId: 'invoice_id',
       invoiceNumber: 'invoice_number',
       notes: 'notes',
+      fbPsid: 'fb_psid',
     };
 
     const updates = [];

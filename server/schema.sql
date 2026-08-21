@@ -380,10 +380,11 @@ CREATE TABLE IF NOT EXISTS leads (
   id VARCHAR(50) NOT NULL PRIMARY KEY,
   lead_number VARCHAR(50) NOT NULL UNIQUE,
   customer_name VARCHAR(191) NOT NULL,
-  phone VARCHAR(50) NOT NULL,
+  phone VARCHAR(50) NULL,
   source VARCHAR(50) NOT NULL DEFAULT 'Facebook',
   inquiry TEXT NULL,
   status VARCHAR(50) NOT NULL DEFAULT 'New',
+  fb_psid VARCHAR(100) NULL,
   lead_date DATE NOT NULL,
   last_contact_date DATE NULL,
   next_follow_up_date DATE NULL,
@@ -404,6 +405,7 @@ CREATE TABLE IF NOT EXISTS leads (
   INDEX idx_leads_number (lead_number),
   INDEX idx_leads_status (status),
   INDEX idx_leads_phone (phone),
+  INDEX idx_leads_fb_psid (fb_psid),
   INDEX idx_leads_next_followup (next_follow_up_date),
   CONSTRAINT fk_leads_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

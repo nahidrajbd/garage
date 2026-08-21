@@ -72,6 +72,23 @@ async function migrate() {
       console.log('✅ job_cards.status simplified.');
     }
 
+    // Ensure leads table supports Facebook-sourced leads (no phone, has a PSID)
+    const [leadCols] = await connection.query(`
+      SELECT COLUMN_NAME, IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'leads'
+    `);
+    const leadColNames = leadCols.map(c => c.COLUMN_NAME);
+    if (!leadColNames.includes('fb_psid')) {
+      await connection.query('ALTER TABLE leads ADD COLUMN fb_psid VARCHAR(100) NULL AFTER status');
+      await connection.query('ALTER TABLE leads ADD INDEX idx_leads_fb_psid (fb_psid)');
+      console.log('✅ Added leads.fb_psid column.');
+    }
+    const phoneCol = leadCols.find(c => c.COLUMN_NAME === 'phone');
+    if (phoneCol && phoneCol.IS_NULLABLE === 'NO') {
+      await connection.query('ALTER TABLE leads MODIFY COLUMN phone VARCHAR(50) NULL');
+      console.log('✅ Made leads.phone nullable (Facebook leads may have no phone).');
+    }
+
     // Seed Settings
     console.log('🔄 Checking settings...');
     const defaultSettings = [

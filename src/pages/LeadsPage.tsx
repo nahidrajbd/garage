@@ -78,7 +78,7 @@ export const LeadsPage: React.FC = () => {
       result = result.filter(
         l =>
           l.customerName.toLowerCase().includes(q) ||
-          l.phone.toLowerCase().includes(q) ||
+          (l.phone || '').toLowerCase().includes(q) ||
           l.leadNumber.toLowerCase().includes(q)
       );
     }
@@ -234,7 +234,9 @@ export const LeadsPage: React.FC = () => {
                         <div className="font-bold text-gray-900">{lead.customerName}</div>
                         <div className="text-[11px] text-gray-400 font-mono">{lead.leadNumber}{lead.vehicleModel ? ` • ${lead.vehicleModel}` : ''}</div>
                       </td>
-                      <td className="py-3.5 px-4 whitespace-nowrap font-mono text-gray-700">{lead.phone}</td>
+                      <td className="py-3.5 px-4 whitespace-nowrap font-mono text-gray-700">
+                        {lead.phone || <span className="text-gray-400 italic font-sans">Facebook only</span>}
+                      </td>
                       <td className="py-3.5 px-4 whitespace-nowrap"><LeadStatusBadge status={lead.status} size="sm" /></td>
                       <td className="py-3.5 px-4 whitespace-nowrap">
                         {lead.nextFollowUpDate ? (
@@ -247,14 +249,16 @@ export const LeadsPage: React.FC = () => {
                       </td>
                       <td className="py-3.5 px-4 text-center whitespace-nowrap">
                         <div className="flex items-center justify-center gap-1">
-                          <a
-                            href={`tel:${lead.phone}`}
-                            onClick={e => e.stopPropagation()}
-                            className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
-                            title="Call"
-                          >
-                            <Phone className="w-4 h-4" />
-                          </a>
+                          {lead.phone && (
+                            <a
+                              href={`tel:${lead.phone}`}
+                              onClick={e => e.stopPropagation()}
+                              className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                              title="Call"
+                            >
+                              <Phone className="w-4 h-4" />
+                            </a>
+                          )}
                           <button
                             type="button"
                             onClick={e => { e.stopPropagation(); navigate(`/leads/${lead.id}`); }}
@@ -292,13 +296,15 @@ export const LeadsPage: React.FC = () => {
                   <div className="flex items-center justify-between text-[11px] text-gray-500 pt-1">
                     <span>Next: {lead.nextFollowUpDate ? formatDate(lead.nextFollowUpDate) : '—'}</span>
                     <div className="flex items-center gap-2">
-                      <a
-                        href={`tel:${lead.phone}`}
-                        onClick={e => e.stopPropagation()}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg"
-                      >
-                        <Phone className="w-3.5 h-3.5" /> Call
-                      </a>
+                      {lead.phone && (
+                        <a
+                          href={`tel:${lead.phone}`}
+                          onClick={e => e.stopPropagation()}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg"
+                        >
+                          <Phone className="w-3.5 h-3.5" /> Call
+                        </a>
+                      )}
                       <ChevronRight className="w-4 h-4 text-gray-300" />
                     </div>
                   </div>

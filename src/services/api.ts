@@ -217,6 +217,13 @@ export const api = {
     });
   },
 
+  async replyToLeadOnFacebook(leadId: string, text: string): Promise<Lead | null> {
+    return request<Lead>(`/leads/${leadId}/reply`, {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+    });
+  },
+
   // Invoices
   async getInvoices(): Promise<Invoice[]> {
     return request<Invoice[]>('/invoices');

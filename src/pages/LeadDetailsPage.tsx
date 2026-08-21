@@ -11,6 +11,7 @@ import {
   MessageSquare,
   Clock,
   XCircle,
+  Send,
 } from 'lucide-react';
 import { Modal } from '../components/common/Modal';
 import { LeadStatusBadge } from '../components/common/Badge';
@@ -40,6 +41,9 @@ export const LeadDetailsPage: React.FC = () => {
   const [fuVisitDate, setFuVisitDate] = useState('');
   const [fuVisitTime, setFuVisitTime] = useState('');
   const [isSavingFollowUp, setIsSavingFollowUp] = useState(false);
+
+  const [fbReplyText, setFbReplyText] = useState('');
+  const [isSendingReply, setIsSendingReply] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
@@ -92,6 +96,25 @@ export const LeadDetailsPage: React.FC = () => {
       showToast('Failed to add follow-up', 'error');
     } finally {
       setIsSavingFollowUp(false);
+    }
+  };
+
+  const handleSendFacebookReply = async () => {
+    if (!lead || !fbReplyText.trim()) return;
+    setIsSendingReply(true);
+    try {
+      const updated = await leadsService.sendFacebookReply(lead.id, fbReplyText.trim());
+      if (updated) {
+        setLead(updated);
+        setFbReplyText('');
+        showToast('Message sent on Facebook', 'success');
+        triggerRefresh();
+      }
+    } catch (err) {
+      console.error(err);
+      showToast(err instanceof Error ? err.message : 'Failed to send message', 'error');
+    } finally {
+      setIsSendingReply(false);
     }
   };
 
@@ -167,13 +190,15 @@ export const LeadDetailsPage: React.FC = () => {
         </button>
 
         <div className="flex items-center gap-2 flex-wrap">
-          <a
-            href={`tel:${lead.phone}`}
-            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition-colors"
-          >
-            <Phone className="w-4 h-4" />
-            <span>Call {lead.phone}</span>
-          </a>
+          {lead.phone && (
+            <a
+              href={`tel:${lead.phone}`}
+              className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition-colors"
+            >
+              <Phone className="w-4 h-4" />
+              <span>Call {lead.phone}</span>
+            </a>
+          )}
           <button
             type="button"
             onClick={() => navigate(`/leads/edit/${lead.id}`)}
@@ -293,6 +318,37 @@ export const LeadDetailsPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Reply on Facebook Messenger */}
+      {lead.fbPsid && (
+        <div className="bg-white p-5 rounded-2xl border border-gray-200/80 shadow-2xs space-y-2">
+          <div className="flex items-center gap-2">
+            <Send className="w-4 h-4 text-[#C1121F]" />
+            <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider font-heading">Reply on Facebook</h3>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <textarea
+              rows={2}
+              value={fbReplyText}
+              onChange={e => setFbReplyText(e.target.value)}
+              placeholder="Type a reply to send on Messenger..."
+              className="flex-1 text-sm px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-red-500 focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={handleSendFacebookReply}
+              disabled={isSendingReply || !fbReplyText.trim()}
+              className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-[#C1121F] hover:bg-[#9E0E19] rounded-lg shadow-xs transition-colors disabled:opacity-50 shrink-0"
+            >
+              <Send className="w-4 h-4" />
+              <span>{isSendingReply ? 'Sending...' : 'Send'}</span>
+            </button>
+          </div>
+          <p className="text-[11px] text-gray-400">
+            Facebook only allows replies within 24 hours of the customer's last message.
+          </p>
+        </div>
+      )}
 
       {/* Follow-up History Timeline */}
       <div className="bg-white p-5 rounded-2xl border border-gray-200/80 shadow-2xs">

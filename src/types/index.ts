@@ -359,10 +359,11 @@ export interface Lead {
   id: string;
   leadNumber: string;      // e.g. "LD-0001"
   customerName: string;
-  phone: string;
+  phone?: string;          // may be absent for Facebook-only leads
   source: LeadSource;
   inquiry: string;         // original Facebook message / customer inquiry
   status: LeadStatus;
+  fbPsid?: string;         // Facebook page-scoped sender id, if this lead came via Messenger
   leadDate: string;        // YYYY-MM-DD
   lastContactDate?: string;    // YYYY-MM-DD
   nextFollowUpDate?: string;   // YYYY-MM-DD
