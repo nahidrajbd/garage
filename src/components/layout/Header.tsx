@@ -68,7 +68,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu }) => {
         {/* + Expense */}
         <button
           type="button"
-          onClick={openExpenseModal}
+          onClick={() => openExpenseModal()}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 sm:px-3.5 sm:py-2 text-xs font-semibold text-rose-800 bg-rose-50 hover:bg-rose-100 border border-rose-300 rounded-lg transition-colors active:scale-98 cursor-pointer"
         >
           <ArrowUpRight className="w-4 h-4 text-rose-600" />

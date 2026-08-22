@@ -104,7 +104,7 @@ export const DashboardPage: React.FC = () => {
 
           <button
             type="button"
-            onClick={openExpenseModal}
+            onClick={() => openExpenseModal()}
             className="inline-flex items-center justify-center gap-1.5 px-3.5 py-2 text-xs font-bold text-rose-800 bg-rose-50 hover:bg-rose-100 border border-rose-300 rounded-xl transition-all active:scale-95 shadow-2xs"
           >
             <ArrowUpRight className="w-4 h-4 text-rose-600 shrink-0" />

@@ -193,6 +193,118 @@ router.post('/', async (req, res) => {
   }
 });
 
+// UPDATE Expense (super admin only)
+router.put('/:id', optionalAuth, async (req, res) => {
+  try {
+    if (req.user && req.user.role === 'staff') {
+      return res.status(403).json({ error: 'Staff users are not permitted to edit expenses.' });
+    }
+    const { id } = req.params;
+    const data = req.body;
+    const amount = Number(data.amount) || 0;
+    const date = data.date || new Date().toISOString().split('T')[0];
+    const time = data.time || new Date().toTimeString().split(' ')[0];
+    const pMethod = normalizePaymentMethod(data.paymentMethod);
+    const categoryName = data.category || 'Other';
+    const paidFromLoan = Boolean(data.paidFromLoan);
+
+    const result = await withTransaction(async (conn) => {
+      const [existingRows] = await conn.query('SELECT * FROM expenses WHERE id = ?', [id]);
+      if (existingRows.length === 0) {
+        throw new Error('Expense not found');
+      }
+      const existing = existingRows[0];
+
+      const [catRows] = await conn.query('SELECT id FROM expense_categories WHERE LOWER(name) = ?', [categoryName.toLowerCase()]);
+      let categoryId = null;
+      if (catRows.length > 0) {
+        categoryId = catRows[0].id;
+      } else {
+        categoryId = `exp_cat_${Date.now()}`;
+        await conn.query('INSERT INTO expense_categories (id, name, status) VALUES (?, ?, "active")', [categoryId, categoryName]);
+      }
+
+      // Reconcile the linked MD-loan record with the (possibly changed)
+      // paidFromLoan flag and amount.
+      let loanPaymentId = existing.loan_payment_id;
+      const loanNote = data.note || `Paid directly by MD for expense: ${data.description || categoryName}`;
+
+      if (paidFromLoan && amount > 0) {
+        if (loanPaymentId) {
+          await conn.query(
+            `UPDATE loan_payments SET amount = ?, payment_date = ?, payment_time = ?, payment_method = ?, notes = ? WHERE id = ?`,
+            [amount, date, time, pMethod, loanNote, loanPaymentId]
+          );
+          await conn.query(
+            `UPDATE financial_transactions SET amount = ?, date = ?, time = ?, payment_method = ?, description = ?, notes = ?
+             WHERE reference_type = 'md_loan' AND reference_id = ?`,
+            [amount, date, time, pMethod, loanNote, loanNote, loanPaymentId]
+          );
+        } else {
+          const [loanRows] = await conn.query('SELECT id FROM loans LIMIT 1');
+          let loanId = loanRows.length > 0 ? loanRows[0].id : null;
+          if (!loanId) {
+            loanId = 'loan-md-default';
+            await conn.query('INSERT INTO loans (id, name, loan_type, total_amount, status) VALUES (?, "MD Loan", "md_loan", 0.00, "active")', [loanId]);
+          }
+          loanPaymentId = `lp-${Date.now()}`;
+          await conn.query(
+            `INSERT INTO loan_payments (id, loan_id, payment_type, amount, payment_date, payment_time, payment_method, reference, notes, created_at)
+             VALUES (?, ?, 'received', ?, ?, ?, ?, ?, ?, NOW())`,
+            [loanPaymentId, loanId, amount, date, time, pMethod, id, loanNote]
+          );
+          await conn.query(
+            `INSERT INTO financial_transactions (
+              id, date, time, type, category, description, payment_method,
+              amount, reference_type, reference_id, notes, created_at
+            ) VALUES (?, ?, ?, 'INCOME', 'Loan from MD', ?, ?, ?, 'md_loan', ?, ?, NOW())`,
+            [`tx-${Date.now()}-in`, date, time, loanNote, pMethod, amount, loanPaymentId, loanNote]
+          );
+        }
+      } else if (loanPaymentId) {
+        await conn.query('DELETE FROM loan_payments WHERE id = ?', [loanPaymentId]);
+        await conn.query('DELETE FROM financial_transactions WHERE reference_type = "md_loan" AND reference_id = ?', [loanPaymentId]);
+        loanPaymentId = null;
+      }
+
+      await conn.query(
+        `UPDATE expenses SET
+          date = ?, time = ?, category_id = ?, category_name = ?, description = ?, payment_method = ?,
+          amount = ?, recipient = ?, note = ?, paid_from_loan = ?, loan_payment_id = ?, updated_at = NOW()
+         WHERE id = ?`,
+        [date, time, categoryId, categoryName, data.description, pMethod, amount, data.recipient || null, data.note || null, paidFromLoan ? 1 : 0, loanPaymentId, id]
+      );
+
+      // Keep the main EXPENSE ledger entry in sync
+      await conn.query(
+        `UPDATE financial_transactions SET date = ?, time = ?, category = ?, description = ?, payment_method = ?, amount = ?, notes = ?
+         WHERE reference_type = 'expense' AND reference_id = ?`,
+        [date, time, categoryName, data.description || `Expense - ${categoryName}`, pMethod, amount, data.note || null, id]
+      );
+
+      return {
+        id,
+        date,
+        time,
+        category: categoryName,
+        description: data.description,
+        paymentMethod: formatPaymentMethod(pMethod),
+        amount,
+        note: data.note,
+        recipient: data.recipient,
+        paidFromLoan,
+        loanPaymentId: loanPaymentId || undefined,
+        createdAt: typeof existing.created_at === 'string' ? existing.created_at : new Date(existing.created_at).toISOString()
+      };
+    });
+
+    res.json(result);
+  } catch (error) {
+    console.error('Error updating expense:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // DELETE Expense
 router.delete('/:id', optionalAuth, async (req, res) => {
   try {

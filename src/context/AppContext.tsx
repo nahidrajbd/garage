@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, ReactNode } from 'react';
-import { Invoice } from '../types';
+import { Invoice, Expense } from '../types';
 
 export interface ToastMessage {
   id: string;
@@ -19,7 +19,8 @@ interface AppContextType {
   openCashInModal: () => void;
   closeCashInModal: () => void;
   isExpenseModalOpen: boolean;
-  openExpenseModal: () => void;
+  editingExpense: Expense | null;
+  openExpenseModal: (expense?: Expense) => void;
   closeExpenseModal: () => void;
   isCustomerModalOpen: boolean;
   openCustomerModal: () => void;
@@ -37,6 +38,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [isCashInModalOpen, setIsCashInModalOpen] = useState(false);
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
   const [paymentModalInvoice, setPaymentModalInvoice] = useState<Invoice | null>(null);
 
@@ -59,8 +61,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const openCashInModal = () => setIsCashInModalOpen(true);
   const closeCashInModal = () => setIsCashInModalOpen(false);
 
-  const openExpenseModal = () => setIsExpenseModalOpen(true);
-  const closeExpenseModal = () => setIsExpenseModalOpen(false);
+  const openExpenseModal = (expense?: Expense) => {
+    setEditingExpense(expense || null);
+    setIsExpenseModalOpen(true);
+  };
+  const closeExpenseModal = () => {
+    setIsExpenseModalOpen(false);
+    setEditingExpense(null);
+  };
 
   const openCustomerModal = () => setIsCustomerModalOpen(true);
   const closeCustomerModal = () => setIsCustomerModalOpen(false);
@@ -80,6 +88,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         openCashInModal,
         closeCashInModal,
         isExpenseModalOpen,
+        editingExpense,
         openExpenseModal,
         closeExpenseModal,
         isCustomerModalOpen,

@@ -439,6 +439,13 @@ export const api = {
     });
   },
 
+  async updateExpense(id: string, data: Omit<Expense, 'id' | 'createdAt'>): Promise<Expense> {
+    return request<Expense>(`/expenses/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
   async deleteExpense(id: string): Promise<boolean> {
     await request(`/expenses/${id}`, { method: 'DELETE' });
     return true;

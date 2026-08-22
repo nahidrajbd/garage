@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  ArrowUpRight, 
-  Search, 
-  Plus, 
-  Trash2, 
-  ShoppingBag, 
-  Users, 
-  Utensils, 
-  Home, 
-  Landmark 
+import {
+  ArrowUpRight,
+  Search,
+  Plus,
+  Trash2,
+  Edit3,
+  ShoppingBag,
+  Users,
+  Utensils,
+  Home,
+  Landmark
 } from 'lucide-react';
 import { StatCard } from '../components/common/StatCard';
 import { PaymentMethodBadge } from '../components/common/Badge';
@@ -124,7 +125,7 @@ export const ExpensesPage: React.FC = () => {
 
         <button
           type="button"
-          onClick={openExpenseModal}
+          onClick={() => openExpenseModal()}
           className="inline-flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-rose-600 hover:bg-rose-700 active:bg-rose-800 rounded-xl transition-all shadow-xs"
         >
           <Plus className="w-4 h-4" />
@@ -238,7 +239,7 @@ export const ExpensesPage: React.FC = () => {
             title="No expense records found"
             description="No entries matched your current filter criteria."
             actionText="+ Record Expense"
-            onAction={openExpenseModal}
+            onAction={() => openExpenseModal()}
           />
         ) : (
           <div className="overflow-x-auto">
@@ -303,16 +304,28 @@ export const ExpensesPage: React.FC = () => {
                     </td>
 
                     <td className="py-3.5 px-4 text-center whitespace-nowrap">
-                      {canDelete && (
-                        <button
-                          type="button"
-                          onClick={() => setItemToDelete(item)}
-                          className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                          title="Delete Record"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
+                      <div className="flex items-center justify-center gap-1">
+                        {canDelete && (
+                          <button
+                            type="button"
+                            onClick={() => openExpenseModal(item)}
+                            className="p-1.5 text-gray-400 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+                            title="Edit Record"
+                          >
+                            <Edit3 className="w-4 h-4" />
+                          </button>
+                        )}
+                        {canDelete && (
+                          <button
+                            type="button"
+                            onClick={() => setItemToDelete(item)}
+                            className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                            title="Delete Record"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}

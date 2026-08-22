@@ -7,7 +7,8 @@ import { ArrowUpRight, AlertCircle } from 'lucide-react';
 import { formatBDT } from '../../utils/formatters';
 
 export const AddExpenseModal: React.FC = () => {
-  const { isExpenseModalOpen, closeExpenseModal, showToast, triggerRefresh } = useApp();
+  const { isExpenseModalOpen, editingExpense, closeExpenseModal, showToast, triggerRefresh } = useApp();
+  const isEditing = Boolean(editingExpense);
 
   const [category, setCategory] = useState<ExpenseCategory>('Purchase');
   const [description, setDescription] = useState<string>('');
@@ -23,16 +24,27 @@ export const AddExpenseModal: React.FC = () => {
   useEffect(() => {
     if (isExpenseModalOpen) {
       api.getExpenseCategories().then(cats => setCategories(cats));
-      setCategory('Purchase');
-      setDescription('');
-      setAmount('');
-      setPaymentMethod('Cash');
-      setDate(new Date().toISOString().split('T')[0]);
-      setRecipient('');
-      setNote('');
-      setPaidFromLoan(false);
+      if (editingExpense) {
+        setCategory(editingExpense.category);
+        setDescription(editingExpense.description);
+        setAmount(String(editingExpense.amount));
+        setPaymentMethod(editingExpense.paymentMethod);
+        setDate(editingExpense.date);
+        setRecipient(editingExpense.recipient || '');
+        setNote(editingExpense.note || '');
+        setPaidFromLoan(Boolean(editingExpense.paidFromLoan));
+      } else {
+        setCategory('Purchase');
+        setDescription('');
+        setAmount('');
+        setPaymentMethod('Cash');
+        setDate(new Date().toISOString().split('T')[0]);
+        setRecipient('');
+        setNote('');
+        setPaidFromLoan(false);
+      }
     }
-  }, [isExpenseModalOpen]);
+  }, [isExpenseModalOpen, editingExpense]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,7 +58,7 @@ export const AddExpenseModal: React.FC = () => {
     try {
       const nowTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-      await api.createExpense({
+      const payload = {
         date,
         time: nowTime,
         category,
@@ -56,19 +68,26 @@ export const AddExpenseModal: React.FC = () => {
         recipient: recipient.trim() || undefined,
         note: note.trim() || undefined,
         paidFromLoan
-      });
+      };
 
-      showToast(
-        paidFromLoan
-          ? `Expense of ${formatBDT(numAmount)} added and ${formatBDT(numAmount)} added to Loan from MD!`
-          : `Expense of ${formatBDT(numAmount)} added successfully!`,
-        'success'
-      );
+      if (isEditing && editingExpense) {
+        await api.updateExpense(editingExpense.id, payload);
+        showToast(`Expense updated successfully!`, 'success');
+      } else {
+        await api.createExpense(payload);
+        showToast(
+          paidFromLoan
+            ? `Expense of ${formatBDT(numAmount)} added and ${formatBDT(numAmount)} added to Loan from MD!`
+            : `Expense of ${formatBDT(numAmount)} added successfully!`,
+          'success'
+        );
+      }
+
       triggerRefresh();
       closeExpenseModal();
     } catch (err) {
       console.error(err);
-      showToast('Failed to record expense', 'error');
+      showToast(isEditing ? 'Failed to update expense' : 'Failed to record expense', 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -78,8 +97,8 @@ export const AddExpenseModal: React.FC = () => {
     <Modal
       isOpen={isExpenseModalOpen}
       onClose={closeExpenseModal}
-      title="Record Expense"
-      subtitle="Add workshop outgoing expenses, material purchases, or salaries"
+      title={isEditing ? 'Edit Expense' : 'Record Expense'}
+      subtitle={isEditing ? 'Update this expense entry' : 'Add workshop outgoing expenses, material purchases, or salaries'}
       maxWidth="lg"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -251,7 +270,7 @@ export const AddExpenseModal: React.FC = () => {
             className="inline-flex items-center gap-1.5 px-5 py-2 text-xs sm:text-sm font-semibold text-white bg-rose-600 hover:bg-rose-700 active:bg-rose-800 rounded-lg transition-colors shadow-xs"
           >
             <ArrowUpRight className="w-4 h-4" />
-            <span>{isSubmitting ? 'Recording...' : 'Save Expense'}</span>
+            <span>{isSubmitting ? (isEditing ? 'Saving...' : 'Recording...') : isEditing ? 'Save Changes' : 'Save Expense'}</span>
           </button>
         </div>
       </form>
