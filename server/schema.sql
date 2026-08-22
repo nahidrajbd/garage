@@ -242,6 +242,8 @@ CREATE TABLE IF NOT EXISTS expenses (
   reference VARCHAR(100) NULL,
   recipient VARCHAR(191) NULL,
   notes TEXT NULL,
+  paid_from_loan TINYINT(1) NOT NULL DEFAULT 0,
+  loan_payment_id VARCHAR(50) NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_expenses_date (expense_date),

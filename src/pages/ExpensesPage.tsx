@@ -283,6 +283,11 @@ export const ExpensesPage: React.FC = () => {
                     <td className="py-3.5 px-4">
                       <div className="font-medium text-gray-900">{item.description}</div>
                       {item.note && <div className="text-[11px] text-gray-400 mt-0.5">{item.note}</div>}
+                      {item.paidFromLoan && (
+                        <span className="inline-block mt-1 px-1.5 py-0.5 text-[10px] font-semibold rounded bg-purple-50 text-purple-700 border border-purple-200">
+                          Paid by MD (Loan)
+                        </span>
+                      )}
                     </td>
 
                     <td className="py-3.5 px-4 text-xs text-gray-600 whitespace-nowrap">

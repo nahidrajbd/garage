@@ -28,6 +28,7 @@ router.get('/', async (req, res) => {
               e.description,
               e.payment_method as paymentMethod,
               e.amount, e.note, e.recipient,
+              e.paid_from_loan as paidFromLoan, e.loan_payment_id as loanPaymentId,
               e.created_at as createdAt
        FROM expenses e
        LEFT JOIN expense_categories ec ON e.category_id = ec.id
@@ -38,6 +39,8 @@ router.get('/', async (req, res) => {
       ...e,
       paymentMethod: formatPaymentMethod(e.paymentMethod),
       amount: Number(e.amount) || 0,
+      paidFromLoan: Boolean(e.paidFromLoan),
+      loanPaymentId: e.loanPaymentId || undefined,
       createdAt: typeof e.createdAt === 'string' ? e.createdAt : new Date(e.createdAt).toISOString()
     }));
 
@@ -58,6 +61,7 @@ router.post('/', async (req, res) => {
     const time = data.time || new Date().toTimeString().split(' ')[0];
     const pMethod = normalizePaymentMethod(data.paymentMethod);
     const categoryName = data.category || 'Other';
+    const paidFromLoan = Boolean(data.paidFromLoan);
 
     const result = await withTransaction(async (conn) => {
       // Find or insert category
@@ -70,11 +74,42 @@ router.post('/', async (req, res) => {
         await conn.query('INSERT INTO expense_categories (id, name, status) VALUES (?, ?, "active")', [categoryId, categoryName]);
       }
 
+      // If this expense was paid directly by the MD (out of pocket), it's not
+      // company cash going out - it's a new liability to the MD. Record it as
+      // a loan "received" so the Loan Summary reflects what the company owes,
+      // paired with an offsetting INCOME entry so net cash impact stays zero
+      // (mirrors how loans.js records a normal MD loan injection).
+      let loanPaymentId = null;
+      if (paidFromLoan && amount > 0) {
+        const [loanRows] = await conn.query('SELECT id FROM loans LIMIT 1');
+        let loanId = loanRows.length > 0 ? loanRows[0].id : null;
+        if (!loanId) {
+          loanId = 'loan-md-default';
+          await conn.query('INSERT INTO loans (id, name, loan_type, total_amount, status) VALUES (?, "MD Loan", "md_loan", 0.00, "active")', [loanId]);
+        }
+
+        loanPaymentId = `lp-${Date.now()}`;
+        const loanNote = data.note || `Paid directly by MD for expense: ${data.description || categoryName}`;
+        await conn.query(
+          `INSERT INTO loan_payments (id, loan_id, payment_type, amount, payment_date, payment_time, payment_method, reference, notes, created_at)
+           VALUES (?, ?, 'received', ?, ?, ?, ?, ?, ?, NOW())`,
+          [loanPaymentId, loanId, amount, date, time, pMethod, expId, loanNote]
+        );
+
+        await conn.query(
+          `INSERT INTO financial_transactions (
+            id, date, time, type, category, description, payment_method,
+            amount, reference_type, reference_id, notes, created_at
+          ) VALUES (?, ?, ?, 'INCOME', 'Loan from MD', ?, ?, ?, 'md_loan', ?, ?, NOW())`,
+          [`tx-${Date.now()}-in`, date, time, loanNote, pMethod, amount, loanPaymentId, loanNote]
+        );
+      }
+
       await conn.query(
         `INSERT INTO expenses (
           id, date, time, category_id, category_name, description, payment_method,
-          amount, recipient, note, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+          amount, recipient, note, paid_from_loan, loan_payment_id, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
         [
           expId,
           date,
@@ -85,7 +120,9 @@ router.post('/', async (req, res) => {
           pMethod,
           amount,
           data.recipient || null,
-          data.note || null
+          data.note || null,
+          paidFromLoan ? 1 : 0,
+          loanPaymentId
         ]
       );
 
@@ -143,6 +180,8 @@ router.post('/', async (req, res) => {
         amount,
         note: data.note,
         recipient: data.recipient,
+        paidFromLoan,
+        loanPaymentId: loanPaymentId || undefined,
         createdAt: new Date().toISOString()
       };
     });
@@ -161,8 +200,17 @@ router.delete('/:id', optionalAuth, async (req, res) => {
       return res.status(403).json({ error: 'Staff users are not permitted to delete expenses.' });
     }
     const { id } = req.params;
+    const [rows] = await pool.query('SELECT loan_payment_id FROM expenses WHERE id = ?', [id]);
+    const loanPaymentId = rows[0]?.loan_payment_id;
+
     await pool.query('DELETE FROM expenses WHERE id = ?', [id]);
     await pool.query('DELETE FROM financial_transactions WHERE reference_type = "expense" AND reference_id = ?', [id]);
+
+    if (loanPaymentId) {
+      await pool.query('DELETE FROM loan_payments WHERE id = ?', [loanPaymentId]);
+      await pool.query('DELETE FROM financial_transactions WHERE reference_type = "md_loan" AND reference_id = ?', [loanPaymentId]);
+    }
+
     res.json({ success: true });
   } catch (error) {
     console.error('Error deleting expense:', error);

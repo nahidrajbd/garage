@@ -58,6 +58,20 @@ async function migrate() {
     }
     console.log('✅ job_cards table schema synchronized with all columns.');
 
+    // Ensure expenses table can flag/link an expense that was paid directly by the MD (loan)
+    const [expenseCols] = await connection.query(`
+      SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'expenses'
+    `);
+    const expenseColNames = expenseCols.map(c => c.COLUMN_NAME);
+    if (!expenseColNames.includes('paid_from_loan')) {
+      await connection.query('ALTER TABLE expenses ADD COLUMN paid_from_loan TINYINT(1) NOT NULL DEFAULT 0');
+    }
+    if (!expenseColNames.includes('loan_payment_id')) {
+      await connection.query('ALTER TABLE expenses ADD COLUMN loan_payment_id VARCHAR(50) NULL');
+    }
+    console.log('✅ expenses table schema synchronized with all columns.');
+
     // Simplify job_cards.status down to just 'in_progress' / 'completed'
     const [statusColRows] = await connection.query(`
       SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS

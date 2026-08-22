@@ -2740,6 +2740,7 @@ export default {
                    e.description,
                    e.payment_method as paymentMethod,
                    e.amount, e.note, e.recipient,
+                   e.paid_from_loan as paidFromLoan, e.loan_payment_id as loanPaymentId,
                    e.created_at as createdAt
             FROM expenses e
             LEFT JOIN expense_categories ec ON e.category_id = ec.id
@@ -2755,6 +2756,8 @@ export default {
             amount: Number(r.amount) || 0,
             recipient: r.recipient,
             note: r.note,
+            paidFromLoan: Boolean(r.paidFromLoan),
+            loanPaymentId: r.loanPaymentId || undefined,
             createdAt: typeof r.createdAt === 'string' ? r.createdAt : new Date(r.createdAt).toISOString(),
           }));
         });
@@ -2773,6 +2776,7 @@ export default {
         const time = data.time || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const pMethod = (data.paymentMethod || 'cash').toLowerCase();
         const categoryName = data.category || 'Other';
+        const paidFromLoan = Boolean(data.paidFromLoan);
 
         const result = await withTransaction(env, async (conn) => {
           const [catRows] = await conn.query('SELECT id FROM expense_categories WHERE LOWER(name) = ?', [categoryName.toLowerCase()]);
@@ -2784,12 +2788,41 @@ export default {
             await conn.query('INSERT INTO expense_categories (id, name, status) VALUES (?, ?, "active")', [categoryId, categoryName]);
           }
 
+          // Expense paid directly by the MD (not company cash): record it as a
+          // loan "received" so Loan Summary reflects the new liability, paired
+          // with an offsetting INCOME entry so net cash impact stays zero.
+          let loanPaymentId = null;
+          if (paidFromLoan && amount > 0) {
+            const [loanRows] = await conn.query('SELECT id FROM loans LIMIT 1');
+            let loanId = loanRows.length > 0 ? loanRows[0].id : null;
+            if (!loanId) {
+              loanId = 'loan-md-default';
+              await conn.query('INSERT INTO loans (id, name, loan_type, total_amount, status) VALUES (?, "MD Loan", "md_loan", 0.00, "active")', [loanId]);
+            }
+
+            loanPaymentId = `lp-${Date.now()}`;
+            const loanNote = data.note || `Paid directly by MD for expense: ${data.description || categoryName}`;
+            await conn.query(
+              `INSERT INTO loan_payments (id, loan_id, payment_type, amount, payment_date, payment_time, payment_method, reference, notes, created_at)
+               VALUES (?, ?, 'received', ?, ?, ?, ?, ?, ?, NOW())`,
+              [loanPaymentId, loanId, amount, date, time, pMethod, expId, loanNote]
+            );
+
+            await conn.query(
+              `INSERT INTO financial_transactions (
+                id, date, time, type, category, description, payment_method,
+                amount, reference_type, reference_id, notes, created_at
+              ) VALUES (?, ?, ?, 'INCOME', 'Loan from MD', ?, ?, ?, 'md_loan', ?, ?, NOW())`,
+              [`tx-${Date.now()}-in`, date, time, loanNote, pMethod, amount, loanPaymentId, loanNote]
+            );
+          }
+
           await conn.query(
             `INSERT INTO expenses (
               id, date, time, category_id, category_name, description, payment_method,
-              amount, recipient, note, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
-            [expId, date, time, categoryId, categoryName, data.description, pMethod, amount, data.recipient || null, data.note || null]
+              amount, recipient, note, paid_from_loan, loan_payment_id, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+            [expId, date, time, categoryId, categoryName, data.description, pMethod, amount, data.recipient || null, data.note || null, paidFromLoan ? 1 : 0, loanPaymentId]
           );
 
           await conn.query(
@@ -2810,6 +2843,8 @@ export default {
             amount,
             recipient: data.recipient,
             note: data.note,
+            paidFromLoan,
+            loanPaymentId: loanPaymentId || undefined,
             createdAt: new Date().toISOString()
           };
         });
@@ -2828,8 +2863,16 @@ export default {
       try {
         const id = path.split('/')[3];
         await withTransaction(env, async (conn) => {
+          const [rows] = await conn.query('SELECT loan_payment_id FROM expenses WHERE id = ?', [id]);
+          const loanPaymentId = rows[0]?.loan_payment_id;
+
           await conn.query('DELETE FROM financial_transactions WHERE reference_type = "expense" AND reference_id = ?', [id]);
           await conn.query('DELETE FROM expenses WHERE id = ?', [id]);
+
+          if (loanPaymentId) {
+            await conn.query('DELETE FROM loan_payments WHERE id = ?', [loanPaymentId]);
+            await conn.query('DELETE FROM financial_transactions WHERE reference_type = "md_loan" AND reference_id = ?', [loanPaymentId]);
+          }
         });
         return jsonResponse({ success: true }, 200, corsHeaders);
       } catch (err) {

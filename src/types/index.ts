@@ -210,6 +210,8 @@ export interface Expense {
   amount: number;
   note?: string;
   recipient?: string;
+  paidFromLoan?: boolean;     // paid directly by the MD; adds to Loan from MD
+  loanPaymentId?: string;
   createdAt: string;
 }
 

@@ -16,6 +16,7 @@ export const AddExpenseModal: React.FC = () => {
   const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [recipient, setRecipient] = useState<string>('');
   const [note, setNote] = useState<string>('');
+  const [paidFromLoan, setPaidFromLoan] = useState<boolean>(false);
   const [categories, setCategories] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -29,6 +30,7 @@ export const AddExpenseModal: React.FC = () => {
       setDate(new Date().toISOString().split('T')[0]);
       setRecipient('');
       setNote('');
+      setPaidFromLoan(false);
     }
   }, [isExpenseModalOpen]);
 
@@ -52,10 +54,16 @@ export const AddExpenseModal: React.FC = () => {
         paymentMethod,
         amount: numAmount,
         recipient: recipient.trim() || undefined,
-        note: note.trim() || undefined
+        note: note.trim() || undefined,
+        paidFromLoan
       });
 
-      showToast(`Expense of ${formatBDT(numAmount)} added successfully!`, 'success');
+      showToast(
+        paidFromLoan
+          ? `Expense of ${formatBDT(numAmount)} added and ${formatBDT(numAmount)} added to Loan from MD!`
+          : `Expense of ${formatBDT(numAmount)} added successfully!`,
+        'success'
+      );
       triggerRefresh();
       closeExpenseModal();
     } catch (err) {
@@ -106,6 +114,21 @@ export const AddExpenseModal: React.FC = () => {
               <strong>Loan Repayment:</strong> This cash out transaction directly reduces the remaining loan balance owed to the MD.
             </p>
           </div>
+        )}
+
+        {/* Paid Directly by MD */}
+        {category !== 'Loan Repayment' && (
+          <label className="flex items-start gap-2.5 p-3 rounded-xl bg-gray-50 border border-gray-200 text-xs cursor-pointer">
+            <input
+              type="checkbox"
+              checked={paidFromLoan}
+              onChange={e => setPaidFromLoan(e.target.checked)}
+              className="mt-0.5 w-4 h-4 rounded border-gray-300 text-rose-600 focus:ring-rose-500"
+            />
+            <span className="text-gray-700">
+              <strong className="text-gray-900">Paid directly by MD</strong> — not from company cash. This will add {formatBDT(parseFloat(amount) || 0)} to the Loan from MD.
+            </span>
+          </label>
         )}
 
         {/* Description */}
