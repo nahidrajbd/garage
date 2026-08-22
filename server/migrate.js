@@ -118,11 +118,13 @@ async function migrate() {
       ['default_footer_text', 'Thank you for choosing Arshi Automobile & Car Hub. Quality service guaranteed.'],
       ['currency_symbol', '৳'],
     ];
+    // INSERT IGNORE: only seeds a setting the first time it's missing. Using
+    // ON DUPLICATE KEY UPDATE here previously clobbered the business's own
+    // saved settings (e.g. address/email/phone edited via Settings) back to
+    // these hardcoded defaults every time this migration was re-run.
     for (const [key, val] of defaultSettings) {
       await connection.query(
-        `INSERT INTO settings (id, setting_key, setting_value) 
-         VALUES (?, ?, ?) 
-         ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)`,
+        `INSERT IGNORE INTO settings (id, setting_key, setting_value) VALUES (?, ?, ?)`,
         [`set_${key}`, key, val]
       );
     }

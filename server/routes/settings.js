@@ -14,14 +14,14 @@ router.get('/', async (req, res) => {
     }
 
     res.json({
-      businessName: settingsMap['business_name'] || 'Arshi Automobile & Car Hub',
-      phone: settingsMap['phone'] || '01712110902',
-      altPhone: settingsMap['alt_phone'] || '01712345678',
-      address: settingsMap['address'] || 'Bhadra Mor, Station Road, Rajshahi, Bangladesh',
-      email: settingsMap['email'] || 'arshi.autohub@gmail.com',
-      invoicePrefix: settingsMap['invoice_prefix'] || 'INV-',
-      defaultFooterText: settingsMap['default_footer_text'] || 'Thank you for choosing Arshi Automobile & Car Hub. Quality service guaranteed.',
-      currencySymbol: settingsMap['currency_symbol'] || '৳'
+      businessName: settingsMap['business_name'] ?? 'Arshi Automobile & Car Hub',
+      phone: settingsMap['phone'] ?? '01712110902',
+      altPhone: settingsMap['alt_phone'] ?? '',
+      address: settingsMap['address'] ?? 'Bhadra Mor, Station Road, Rajshahi, Bangladesh',
+      email: settingsMap['email'] ?? 'arshi.autohub@gmail.com',
+      invoicePrefix: settingsMap['invoice_prefix'] ?? 'INV-',
+      defaultFooterText: settingsMap['default_footer_text'] ?? 'Thank you for choosing Arshi Automobile & Car Hub. Quality service guaranteed.',
+      currencySymbol: settingsMap['currency_symbol'] ?? '৳'
     });
   } catch (error) {
     console.error('Error fetching settings:', error);
@@ -62,14 +62,14 @@ router.put('/', async (req, res) => {
     }
 
     res.json({
-      businessName: settingsMap['business_name'] || 'Arshi Automobile & Car Hub',
-      phone: settingsMap['phone'] || '01712110902',
-      altPhone: settingsMap['alt_phone'] || '01712345678',
-      address: settingsMap['address'] || 'Bhadra Mor, Station Road, Rajshahi, Bangladesh',
-      email: settingsMap['email'] || 'arshi.autohub@gmail.com',
-      invoicePrefix: settingsMap['invoice_prefix'] || 'INV-',
-      defaultFooterText: settingsMap['default_footer_text'] || 'Thank you for choosing Arshi Automobile & Car Hub. Quality service guaranteed.',
-      currencySymbol: settingsMap['currency_symbol'] || '৳'
+      businessName: settingsMap['business_name'] ?? 'Arshi Automobile & Car Hub',
+      phone: settingsMap['phone'] ?? '01712110902',
+      altPhone: settingsMap['alt_phone'] ?? '',
+      address: settingsMap['address'] ?? 'Bhadra Mor, Station Road, Rajshahi, Bangladesh',
+      email: settingsMap['email'] ?? 'arshi.autohub@gmail.com',
+      invoicePrefix: settingsMap['invoice_prefix'] ?? 'INV-',
+      defaultFooterText: settingsMap['default_footer_text'] ?? 'Thank you for choosing Arshi Automobile & Car Hub. Quality service guaranteed.',
+      currencySymbol: settingsMap['currency_symbol'] ?? '৳'
     });
   } catch (error) {
     console.error('Error updating settings:', error);

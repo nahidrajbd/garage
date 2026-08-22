@@ -822,16 +822,16 @@ export default {
           const map = {};
           rows.forEach(r => { map[r.setting_key] = r.setting_value; });
           return {
-            businessName: map.business_name || 'Arshi Automobile & Car Hub',
-            phone: map.phone || '01712110902',
-            altPhone: map.alt_phone || '01712345678',
-            address: map.address || 'Bhadra Mor, Station Road, Rajshahi, Bangladesh',
-            email: map.email || 'arshi.autohub@gmail.com',
-            invoicePrefix: map.invoice_prefix || 'INV-',
-            quotationPrefix: map.quotation_prefix || 'QT-',
-            jobCardPrefix: map.job_card_prefix || 'JC-',
-            defaultFooterText: map.default_footer_text || 'Thank you for choosing Arshi Automobile & Car Hub. Quality service guaranteed.',
-            currencySymbol: map.currency_symbol || '৳',
+            businessName: map.business_name ?? 'Arshi Automobile & Car Hub',
+            phone: map.phone ?? '01712110902',
+            altPhone: map.alt_phone ?? '',
+            address: map.address ?? 'Bhadra Mor, Station Road, Rajshahi, Bangladesh',
+            email: map.email ?? 'arshi.autohub@gmail.com',
+            invoicePrefix: map.invoice_prefix ?? 'INV-',
+            quotationPrefix: map.quotation_prefix ?? 'QT-',
+            jobCardPrefix: map.job_card_prefix ?? 'JC-',
+            defaultFooterText: map.default_footer_text ?? 'Thank you for choosing Arshi Automobile & Car Hub. Quality service guaranteed.',
+            currencySymbol: map.currency_symbol ?? '৳',
           };
         });
         return jsonResponse(settings, 200, corsHeaders);
@@ -871,16 +871,16 @@ export default {
           const map = {};
           rows.forEach(r => { map[r.setting_key] = r.setting_value; });
           return {
-            businessName: map.business_name || 'Arshi Automobile & Car Hub',
-            phone: map.phone || '01712110902',
-            altPhone: map.alt_phone || '01712345678',
-            address: map.address || 'Bhadra Mor, Station Road, Rajshahi, Bangladesh',
-            email: map.email || 'arshi.autohub@gmail.com',
-            invoicePrefix: map.invoice_prefix || 'INV-',
-            quotationPrefix: map.quotation_prefix || 'QT-',
-            jobCardPrefix: map.job_card_prefix || 'JC-',
-            defaultFooterText: map.default_footer_text || 'Thank you for choosing Arshi Automobile & Car Hub. Quality service guaranteed.',
-            currencySymbol: map.currency_symbol || '৳',
+            businessName: map.business_name ?? 'Arshi Automobile & Car Hub',
+            phone: map.phone ?? '01712110902',
+            altPhone: map.alt_phone ?? '',
+            address: map.address ?? 'Bhadra Mor, Station Road, Rajshahi, Bangladesh',
+            email: map.email ?? 'arshi.autohub@gmail.com',
+            invoicePrefix: map.invoice_prefix ?? 'INV-',
+            quotationPrefix: map.quotation_prefix ?? 'QT-',
+            jobCardPrefix: map.job_card_prefix ?? 'JC-',
+            defaultFooterText: map.default_footer_text ?? 'Thank you for choosing Arshi Automobile & Car Hub. Quality service guaranteed.',
+            currencySymbol: map.currency_symbol ?? '৳',
           };
         });
         return jsonResponse(result, 200, corsHeaders);
