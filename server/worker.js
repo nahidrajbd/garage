@@ -2004,6 +2004,37 @@ export default {
           const status = due === 0 ? 'paid' : paid > 0 ? 'partial' : 'due';
           const pMethod = (body.paymentMethod || 'cash').toLowerCase();
 
+          // Auto-link or create the customer/vehicle if the invoice wasn't
+          // built from an existing customer record (e.g. typed in freeform).
+          let customerId = body.customerId;
+          let vehicleId = body.vehicleId;
+
+          if (!customerId && body.customerPhone) {
+            const [custs] = await conn.query('SELECT id FROM customers WHERE phone = ?', [body.customerPhone.trim()]);
+            if (custs.length > 0) {
+              customerId = custs[0].id;
+            } else if (body.customerName) {
+              customerId = `cust-${Date.now()}`;
+              await conn.query(
+                `INSERT INTO customers (id, name, phone, status, created_at) VALUES (?, ?, ?, 'active', NOW())`,
+                [customerId, body.customerName.trim(), body.customerPhone.trim()]
+              );
+            }
+          }
+
+          if (customerId && body.vehicleRegistration) {
+            const [vehs] = await conn.query('SELECT id FROM vehicles WHERE customer_id = ? AND registration_number = ?', [customerId, body.vehicleRegistration.trim()]);
+            if (vehs.length > 0) {
+              vehicleId = vehs[0].id;
+            } else {
+              vehicleId = `veh-${Date.now()}`;
+              await conn.query(
+                `INSERT INTO vehicles (id, customer_id, registration_number, model, created_at) VALUES (?, ?, ?, ?, NOW())`,
+                [vehicleId, customerId, body.vehicleRegistration.trim(), body.vehicleModel.trim() || 'Vehicle']
+              );
+            }
+          }
+
           await conn.query(
             `INSERT INTO invoices (id, invoice_number, quotation_id, job_card_id, customer_id, vehicle_id, customer_name, customer_phone, vehicle_registration, vehicle_model, vehicle_color, date, subtotal, discount, grand_total, paid, due, status, payment_method, notes, created_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
@@ -2012,8 +2043,8 @@ export default {
               invoiceNumber,
               body.quotationId || null,
               body.jobCardId || null,
-              body.customerId || null,
-              body.vehicleId || null,
+              customerId || null,
+              vehicleId || null,
               body.customerName.trim(),
               body.customerPhone.trim(),
               body.vehicleRegistration.trim(),
@@ -2062,7 +2093,7 @@ export default {
             await queueReviewSms(conn, { id: invId, customer_phone: body.customerPhone });
           }
 
-          return { id: invId, invoiceNumber, ...body, grandTotal, paid, due, status };
+          return { id: invId, invoiceNumber, ...body, customerId, vehicleId, grandTotal, paid, due, status };
         });
         return jsonResponse(created, 201, corsHeaders);
       } catch (err) {
