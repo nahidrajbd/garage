@@ -2833,6 +2833,23 @@ export default {
             [`tx-${Date.now()}`, date, time, categoryName, data.description, pMethod, amount, expId, data.note || null]
           );
 
+          // If category is Loan Repayment, mirror it into loan_payments so it
+          // also shows up on the Loans tab, not just Expenses/Transactions.
+          if (categoryName.toLowerCase() === 'loan repayment') {
+            const [loanRows] = await conn.query('SELECT id FROM loans LIMIT 1');
+            let loanId = loanRows.length > 0 ? loanRows[0].id : null;
+            if (!loanId) {
+              loanId = 'loan-md-default';
+              await conn.query('INSERT INTO loans (id, name, loan_type, total_amount, status) VALUES (?, "MD Loan", "md_loan", 0.00, "active")', [loanId]);
+            }
+
+            await conn.query(
+              `INSERT INTO loan_payments (id, loan_id, payment_type, amount, payment_date, payment_time, payment_method, reference, notes, created_at)
+               VALUES (?, ?, 'repayment', ?, ?, ?, ?, ?, ?, NOW())`,
+              [`lp-${Date.now()}`, loanId, amount, date, time, pMethod, data.reference || null, data.note || data.description || 'Loan Repayment']
+            );
+          }
+
           return {
             id: expId,
             date,
