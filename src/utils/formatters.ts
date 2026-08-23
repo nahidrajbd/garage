@@ -40,4 +40,10 @@ export function generateJobCardNumber(existingJobCardsCount: number): string {
   return `JC-${nextNum}`;
 }
 
+// Strips everything but digits so phone numbers can be compared regardless
+// of dashes/spaces formatting (e.g. "01712-345678" vs "01712345678").
+export function normalizePhoneDigits(phone: string | undefined | null): string {
+  return (phone || '').replace(/\D/g, '');
+}
+
 
