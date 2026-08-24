@@ -104,14 +104,20 @@ export const ReportsPage: React.FC = () => {
       invoiceCount: number;
     }[] = [];
 
+    const todayDhaka = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Dhaka' });
     for (let i = 0; i < 30; i++) {
-      const d = new Date();
+      const d = new Date(`${todayDhaka}T00:00:00`);
       d.setDate(d.getDate() - i);
-      const dateStr = d.toISOString().split('T')[0];
+      const dateStr = d.toLocaleDateString('en-CA');
 
       const dayCashIn = cashInList.filter(c => c.date === dateStr);
       const dayExpenses = expenses.filter(e => e.date === dateStr);
-      const dayInvoices = invoices.filter(inv => inv.date === dateStr);
+      // Use createdAt (when the invoice was actually made), not the editable
+      // invoice date on the document, so backdated invoices don't skew the count.
+      const dayInvoices = invoices.filter(inv => {
+        const createdDate = new Date(inv.createdAt).toLocaleDateString('en-CA', { timeZone: 'Asia/Dhaka' });
+        return createdDate === dateStr;
+      });
 
       days.push({
         date: dateStr,
