@@ -93,6 +93,49 @@ export const ReportsPage: React.FC = () => {
   );
   const monthNetCashFlow = (monthTotalIncome + monthMDLoans) - monthTotalExpenses;
 
+  // LAST 30 DAYS DAILY REPORT TABLE
+  const dailyReportRows = useMemo(() => {
+    const days: {
+      date: string;
+      cashIn: number;
+      cashOut: number;
+      loanIn: number;
+      loanOut: number;
+      invoiceCount: number;
+    }[] = [];
+
+    for (let i = 0; i < 30; i++) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const dateStr = d.toISOString().split('T')[0];
+
+      const dayCashIn = cashInList.filter(c => c.date === dateStr);
+      const dayExpenses = expenses.filter(e => e.date === dateStr);
+      const dayInvoices = invoices.filter(inv => inv.date === dateStr);
+
+      days.push({
+        date: dateStr,
+        cashIn: dayCashIn.filter(c => c.type !== 'Loan from MD').reduce((s, c) => s + c.amount, 0),
+        cashOut: dayExpenses.filter(e => e.category !== 'Loan Repayment').reduce((s, e) => s + e.amount, 0),
+        loanIn: dayCashIn.filter(c => c.type === 'Loan from MD').reduce((s, c) => s + c.amount, 0),
+        loanOut: dayExpenses.filter(e => e.category === 'Loan Repayment').reduce((s, e) => s + e.amount, 0),
+        invoiceCount: dayInvoices.length
+      });
+    }
+    return days;
+  }, [cashInList, expenses, invoices]);
+
+  const dailyReportTotals = useMemo(() => dailyReportRows.reduce(
+    (acc, r) => ({
+      cashIn: acc.cashIn + r.cashIn,
+      cashOut: acc.cashOut + r.cashOut,
+      loanIn: acc.loanIn + r.loanIn,
+      loanOut: acc.loanOut + r.loanOut,
+      invoiceCount: acc.invoiceCount + r.invoiceCount
+    }),
+    { cashIn: 0, cashOut: 0, loanIn: 0, loanOut: 0, invoiceCount: 0 }
+  ), [dailyReportRows]);
+
   // Expense Breakdown
   const expenseBreakdown = useMemo(() => {
     const categories = ['Salary', 'Purchase', 'Food', 'Rent', 'Loan Repayment', 'Other'];
@@ -201,6 +244,69 @@ export const ReportsPage: React.FC = () => {
               {formatBDT(dayNet)}
             </p>
           </div>
+        </div>
+      </div>
+
+      {/* Last 30 Days Daily Report Table */}
+      <div className="bg-white p-5 rounded-2xl border border-gray-200/80 shadow-2xs space-y-4">
+        <div className="flex items-center gap-2 pb-3 border-b border-gray-100">
+          <Layers className="w-4 h-4 text-[#C1121F]" />
+          <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider font-heading">
+            Last 30 Days — Daily Report
+          </h3>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs sm:text-sm">
+            <thead className="bg-gray-50/70 text-gray-500 text-[11px] font-semibold uppercase tracking-wider border-b border-gray-200">
+              <tr>
+                <th className="py-2.5 px-3">Date / Day</th>
+                <th className="py-2.5 px-3 text-right">Cash In</th>
+                <th className="py-2.5 px-3 text-right">Cash Out</th>
+                <th className="py-2.5 px-3 text-right">Loan In</th>
+                <th className="py-2.5 px-3 text-right">Loan Out</th>
+                <th className="py-2.5 px-3 text-right"># Invoices</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {dailyReportRows.map(row => {
+                const isToday = row.date === todayStr;
+                return (
+                  <tr key={row.date} className={isToday ? 'bg-red-50/40' : 'hover:bg-gray-50/80'}>
+                    <td className="py-2 px-3 whitespace-nowrap font-medium text-gray-800">
+                      {new Date(row.date).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' })}
+                      {isToday && <span className="ml-1.5 text-[10px] font-bold text-[#C1121F]">TODAY</span>}
+                    </td>
+                    <td className="py-2 px-3 text-right font-mono text-emerald-700">
+                      {row.cashIn > 0 ? formatBDT(row.cashIn) : '—'}
+                    </td>
+                    <td className="py-2 px-3 text-right font-mono text-rose-700">
+                      {row.cashOut > 0 ? formatBDT(row.cashOut) : '—'}
+                    </td>
+                    <td className="py-2 px-3 text-right font-mono text-blue-700">
+                      {row.loanIn > 0 ? formatBDT(row.loanIn) : '—'}
+                    </td>
+                    <td className="py-2 px-3 text-right font-mono text-amber-700">
+                      {row.loanOut > 0 ? formatBDT(row.loanOut) : '—'}
+                    </td>
+                    <td className="py-2 px-3 text-right font-semibold text-gray-700">
+                      {row.invoiceCount || '—'}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+            <tfoot>
+              <tr className="border-t-2 border-gray-300 font-bold text-gray-900">
+                <td className="py-2.5 px-3">30-Day Total</td>
+                <td className="py-2.5 px-3 text-right font-mono text-emerald-700">{formatBDT(dailyReportTotals.cashIn)}</td>
+                <td className="py-2.5 px-3 text-right font-mono text-rose-700">{formatBDT(dailyReportTotals.cashOut)}</td>
+                <td className="py-2.5 px-3 text-right font-mono text-blue-700">{formatBDT(dailyReportTotals.loanIn)}</td>
+                <td className="py-2.5 px-3 text-right font-mono text-amber-700">{formatBDT(dailyReportTotals.loanOut)}</td>
+                <td className="py-2.5 px-3 text-right">{dailyReportTotals.invoiceCount}</td>
+              </tr>
+            </tfoot>
+          </table>
         </div>
       </div>
 

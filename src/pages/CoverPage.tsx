@@ -149,13 +149,8 @@ export const CoverPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Privacy Indicator & Management Link */}
+          {/* Management Link */}
           <div className="flex flex-wrap items-center gap-3 pt-2 md:pt-0 border-t md:border-t-0 border-white/20">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 border border-white/20 text-xs font-medium text-white backdrop-blur-sm">
-              <ShieldCheck className="w-4 h-4 text-emerald-300 shrink-0" />
-              <span>Customer-Safe View</span>
-            </div>
-
             <button
               type="button"
               onClick={() => navigate('/dashboard')}
