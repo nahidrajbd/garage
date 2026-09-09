@@ -2152,6 +2152,18 @@ export default {
           params.push(id);
           await conn.query(`UPDATE invoices SET ${updates.join(', ')} WHERE id = ?`, params);
 
+          // Moving the invoice's own date should move its recorded payment(s)
+          // and their ledger entries too, otherwise Reports keeps showing the
+          // transaction on the old date even though the invoice was corrected.
+          if (body.date !== undefined) {
+            await conn.query('UPDATE payments SET payment_date = ? WHERE invoice_id = ?', [body.date, id]);
+            await conn.query(
+              `UPDATE financial_transactions SET date = ?
+               WHERE reference_type = 'invoice_payment' AND reference_id = ?`,
+              [body.date, inv.invoice_number]
+            );
+          }
+
           const [updatedRows] = await conn.query('SELECT * FROM invoices WHERE id = ?', [id]);
           const inv2 = updatedRows[0];
           const [items] = await conn.query('SELECT * FROM invoice_items WHERE invoice_id = ? ORDER BY sort_order ASC', [id]);

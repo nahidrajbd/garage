@@ -470,6 +470,18 @@ router.put('/:id', optionalAuth, async (req, res) => {
       params.push(id);
       await conn.query(`UPDATE invoices SET ${updates.join(', ')} WHERE id = ?`, params);
 
+      // Moving the invoice's own date should move its recorded payment(s)
+      // and their ledger entries too, otherwise Reports keeps showing the
+      // transaction on the old date even though the invoice was corrected.
+      if (data.date !== undefined) {
+        await conn.query('UPDATE payments SET payment_date = ? WHERE invoice_id = ?', [data.date, id]);
+        await conn.query(
+          `UPDATE financial_transactions SET date = ?
+           WHERE reference_type = 'invoice_payment' AND reference_id = ?`,
+          [data.date, inv.invoice_number]
+        );
+      }
+
       const [updatedRows] = await conn.query('SELECT * FROM invoices WHERE id = ?', [id]);
       const [items] = await conn.query(
         `SELECT id, invoice_id as invoiceId, description as serviceName, description, quantity, unit_price as price, total
