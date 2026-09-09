@@ -13,12 +13,14 @@ import {
   Receipt,
   QrCode,
   Mail,
-  Send
+  Send,
+  Edit3
 } from 'lucide-react';
 import { InvoiceStatusBadge, PaymentMethodBadge } from '../components/common/Badge';
 import { Barcode } from '../components/common/Barcode';
 import { Modal } from '../components/common/Modal';
 import { useApp } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 import { Invoice, Settings, Customer } from '../types';
 import { formatBDT, formatDate } from '../utils/formatters';
@@ -29,6 +31,7 @@ export const InvoiceDetailsPage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { openPaymentModal, refreshTrigger, showToast } = useApp();
+  const { isSuperAdmin } = useAuth();
 
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -151,6 +154,18 @@ export const InvoiceDetailsPage: React.FC = () => {
             >
               <CreditCard className="w-4 h-4 text-emerald-600" />
               <span>Collect Due ({formatBDT(invoice.due)})</span>
+            </button>
+          )}
+
+          {isSuperAdmin && (
+            <button
+              type="button"
+              onClick={() => navigate(`/invoices/edit/${invoice.id}`)}
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-gray-700 bg-white hover:bg-gray-100 border border-gray-300 rounded-xl transition-colors"
+              title="Super Admin only"
+            >
+              <Edit3 className="w-4 h-4 text-gray-500" />
+              <span>Edit Invoice</span>
             </button>
           )}
 

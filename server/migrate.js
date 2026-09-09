@@ -118,6 +118,26 @@ async function migrate() {
       console.log('✅ Added lead_follow_ups.direction column.');
     }
 
+    // quotation_items was missing its own service_name column - "description"
+    // was doing double duty, so whatever a user typed into the separate
+    // Description/Scope field was silently discarded and overwritten with
+    // the service name on every read. Split them into two real columns.
+    const [qiCols] = await connection.query(`
+      SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'quotation_items'
+    `);
+    const qiColNames = qiCols.map(c => c.COLUMN_NAME);
+    if (!qiColNames.includes('service_name')) {
+      console.log('🔄 Splitting quotation_items.description into service_name + description...');
+      await connection.query('ALTER TABLE quotation_items ADD COLUMN service_name VARCHAR(191) NULL AFTER item_type');
+      // Existing rows only ever had the service name stored in "description"
+      // (that was the bug). Move it into the new column; clear description
+      // since it was never real scope text to begin with.
+      await connection.query('UPDATE quotation_items SET service_name = description, description = NULL WHERE service_name IS NULL');
+      await connection.query('ALTER TABLE quotation_items MODIFY COLUMN service_name VARCHAR(191) NOT NULL');
+      console.log('✅ quotation_items.service_name added and backfilled.');
+    }
+
     // Seed Settings
     console.log('🔄 Checking settings...');
     const defaultSettings = [

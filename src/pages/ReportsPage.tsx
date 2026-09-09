@@ -1,19 +1,20 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  BarChart3, 
-  ArrowDownLeft, 
-  ArrowUpRight, 
-  Calendar, 
-  PieChart, 
-  Wallet, 
-  CheckCircle2, 
+import {
+  BarChart3,
+  ArrowDownLeft,
+  ArrowUpRight,
+  Calendar,
+  PieChart,
+  Wallet,
+  CheckCircle2,
   Landmark,
-  Layers
+  Layers,
+  Printer
 } from 'lucide-react';
 import { StatCard } from '../components/common/StatCard';
 import { useApp } from '../context/AppContext';
 import { api } from '../services/api';
-import { CashIn, Expense, Invoice } from '../types';
+import { CashIn, Expense, Invoice, Settings } from '../types';
 import { formatBDT, formatDate } from '../utils/formatters';
 
 export const ReportsPage: React.FC = () => {
@@ -22,6 +23,7 @@ export const ReportsPage: React.FC = () => {
   const [cashInList, setCashInList] = useState<CashIn[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [settings, setSettings] = useState<Settings | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Month selector (YYYY-MM)
@@ -36,14 +38,16 @@ export const ReportsPage: React.FC = () => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [cList, eList, iList] = await Promise.all([
+        const [cList, eList, iList, sett] = await Promise.all([
           api.getCashIn(),
           api.getExpenses(),
-          api.getInvoices()
+          api.getInvoices(),
+          api.getSettings()
         ]);
         setCashInList(cList);
         setExpenses(eList);
         setInvoices(iList);
+        setSettings(sett);
       } catch (err) {
         console.error(err);
       } finally {
@@ -142,6 +146,50 @@ export const ReportsPage: React.FC = () => {
     { cashIn: 0, cashOut: 0, loanIn: 0, loanOut: 0, invoiceCount: 0 }
   ), [dailyReportRows]);
 
+  // PRINTABLE MONTHLY REPORT — every day of the selected calendar month
+  // (capped at today if the selected month is still in progress)
+  const monthlyPrintRows = useMemo(() => {
+    const [yearStr, monthStr] = selectedMonth.split('-');
+    const year = parseInt(yearStr, 10);
+    const month = parseInt(monthStr, 10); // 1-12
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const todayDhaka = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Dhaka' });
+    const isCurrentMonth = selectedMonth === todayDhaka.substring(0, 7);
+    const lastDay = isCurrentMonth ? parseInt(todayDhaka.substring(8, 10), 10) : daysInMonth;
+
+    const rows: { date: string; cashIn: number; cashOut: number; loanIn: number; loanOut: number; invoiceCount: number }[] = [];
+    for (let day = 1; day <= lastDay; day++) {
+      const dateStr = `${selectedMonth}-${String(day).padStart(2, '0')}`;
+      const dayCashIn = cashInList.filter(c => c.date === dateStr);
+      const dayExpenses = expenses.filter(e => e.date === dateStr);
+      const dayInvoices = invoices.filter(inv => {
+        const createdDate = new Date(inv.createdAt).toLocaleDateString('en-CA', { timeZone: 'Asia/Dhaka' });
+        return createdDate === dateStr;
+      });
+
+      rows.push({
+        date: dateStr,
+        cashIn: dayCashIn.filter(c => c.type !== 'Loan from MD').reduce((s, c) => s + c.amount, 0),
+        cashOut: dayExpenses.filter(e => e.category !== 'Loan Repayment').reduce((s, e) => s + e.amount, 0),
+        loanIn: dayCashIn.filter(c => c.type === 'Loan from MD').reduce((s, c) => s + c.amount, 0),
+        loanOut: dayExpenses.filter(e => e.category === 'Loan Repayment').reduce((s, e) => s + e.amount, 0),
+        invoiceCount: dayInvoices.length
+      });
+    }
+    return rows;
+  }, [cashInList, expenses, invoices, selectedMonth]);
+
+  const monthlyPrintTotals = useMemo(() => monthlyPrintRows.reduce(
+    (acc, r) => ({
+      cashIn: acc.cashIn + r.cashIn,
+      cashOut: acc.cashOut + r.cashOut,
+      loanIn: acc.loanIn + r.loanIn,
+      loanOut: acc.loanOut + r.loanOut,
+      invoiceCount: acc.invoiceCount + r.invoiceCount
+    }),
+    { cashIn: 0, cashOut: 0, loanIn: 0, loanOut: 0, invoiceCount: 0 }
+  ), [monthlyPrintRows]);
+
   // Expense Breakdown
   const expenseBreakdown = useMemo(() => {
     const categories = ['Salary', 'Purchase', 'Food', 'Rent', 'Loan Repayment', 'Other'];
@@ -173,7 +221,8 @@ export const ReportsPage: React.FC = () => {
   ];
 
   return (
-    <div className="space-y-6">
+    <>
+    <div className="no-print space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-gray-200/80 shadow-2xs">
         <div>
@@ -185,18 +234,29 @@ export const ReportsPage: React.FC = () => {
           </p>
         </div>
 
-        {/* Month Selector */}
-        <div className="flex items-center gap-2">
-          <Calendar className="w-4 h-4 text-gray-500" />
-          <select
-            value={selectedMonth}
-            onChange={e => setSelectedMonth(e.target.value)}
-            className="text-xs sm:text-sm font-semibold px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 bg-white"
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Month Selector */}
+          <div className="flex items-center gap-2">
+            <Calendar className="w-4 h-4 text-gray-500" />
+            <select
+              value={selectedMonth}
+              onChange={e => setSelectedMonth(e.target.value)}
+              className="text-xs sm:text-sm font-semibold px-3 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 bg-white"
+            >
+              {monthOptions.map(m => (
+                <option key={m.value} value={m.value}>{m.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="inline-flex items-center gap-2 px-4 py-2 text-xs sm:text-sm font-bold text-white bg-[#C1121F] hover:bg-[#9E0E19] active:bg-[#800C15] rounded-xl shadow-xs transition-colors"
           >
-            {monthOptions.map(m => (
-              <option key={m.value} value={m.value}>{m.label}</option>
-            ))}
-          </select>
+            <Printer className="w-4 h-4" />
+            <span>Print / Download Monthly Report (A4)</span>
+          </button>
         </div>
       </div>
 
@@ -405,5 +465,73 @@ export const ReportsPage: React.FC = () => {
         )}
       </div>
     </div>
+
+    {/* Printable Monthly Report (A4) — screen-hidden, shown only when printing */}
+    <div className="print-only printable-invoice bg-white p-8 sm:p-10 text-gray-900 font-sans">
+      <div className="flex justify-between items-start pb-6 border-b-2 border-gray-800">
+        <div>
+          <span className="text-xs font-black tracking-widest text-[#C1121F] uppercase font-mono">
+            NEXTGARAGE
+          </span>
+          <h1 className="text-xl font-extrabold font-heading text-gray-900 tracking-tight uppercase mt-1">
+            {settings?.businessName || 'Arshi Automobile & Car Hub'}
+          </h1>
+          <p className="text-xs text-gray-600 mt-1">{settings?.address || 'Rajshahi, Bangladesh'}</p>
+          <p className="text-xs text-gray-800 mt-0.5 font-mono">Phone: {settings?.phone || '01712110902'}</p>
+        </div>
+        <div className="text-right">
+          <div className="inline-block bg-neutral-900 text-white font-mono text-xs px-3 py-1 rounded font-bold uppercase tracking-wider">
+            Monthly Report
+          </div>
+          <p className="text-base font-extrabold text-[#C1121F] mt-1.5">
+            {monthOptions.find(m => m.value === selectedMonth)?.label || selectedMonth}
+          </p>
+          <p className="text-[11px] text-gray-500 mt-1">Generated: {formatDate(todayStr)}</p>
+        </div>
+      </div>
+
+      <table className="w-full text-left text-xs mt-6">
+        <thead>
+          <tr className="border-b-2 border-gray-300 text-gray-700 font-bold uppercase tracking-wider">
+            <th className="py-2 px-2">Date</th>
+            <th className="py-2 px-2 text-right">Income</th>
+            <th className="py-2 px-2 text-right">Expense</th>
+            <th className="py-2 px-2 text-right">Loan In</th>
+            <th className="py-2 px-2 text-right">Loan Out</th>
+            <th className="py-2 px-2 text-right">Invoices</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-200">
+          {monthlyPrintRows.map(row => (
+            <tr key={row.date}>
+              <td className="py-1.5 px-2 font-medium text-gray-800">
+                {new Date(row.date).toLocaleDateString('en-GB', { weekday: 'short', day: '2-digit', month: 'short' })}
+              </td>
+              <td className="py-1.5 px-2 text-right font-mono">{row.cashIn > 0 ? formatBDT(row.cashIn) : '—'}</td>
+              <td className="py-1.5 px-2 text-right font-mono">{row.cashOut > 0 ? formatBDT(row.cashOut) : '—'}</td>
+              <td className="py-1.5 px-2 text-right font-mono">{row.loanIn > 0 ? formatBDT(row.loanIn) : '—'}</td>
+              <td className="py-1.5 px-2 text-right font-mono">{row.loanOut > 0 ? formatBDT(row.loanOut) : '—'}</td>
+              <td className="py-1.5 px-2 text-right font-semibold">{row.invoiceCount || '—'}</td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr className="border-t-2 border-gray-800 font-bold text-gray-900">
+            <td className="py-2 px-2">Month Total</td>
+            <td className="py-2 px-2 text-right font-mono">{formatBDT(monthlyPrintTotals.cashIn)}</td>
+            <td className="py-2 px-2 text-right font-mono">{formatBDT(monthlyPrintTotals.cashOut)}</td>
+            <td className="py-2 px-2 text-right font-mono">{formatBDT(monthlyPrintTotals.loanIn)}</td>
+            <td className="py-2 px-2 text-right font-mono">{formatBDT(monthlyPrintTotals.loanOut)}</td>
+            <td className="py-2 px-2 text-right">{monthlyPrintTotals.invoiceCount}</td>
+          </tr>
+        </tfoot>
+      </table>
+
+      <div className="mt-6 pt-4 border-t border-gray-300 flex justify-between text-xs text-gray-600">
+        <span>Net Cash Flow: <strong className="text-gray-900">{formatBDT((monthlyPrintTotals.cashIn + monthlyPrintTotals.loanIn) - (monthlyPrintTotals.cashOut + monthlyPrintTotals.loanOut))}</strong></span>
+        <span>Total Invoices: <strong className="text-gray-900">{monthlyPrintTotals.invoiceCount}</strong></span>
+      </div>
+    </div>
+    </>
   );
 };

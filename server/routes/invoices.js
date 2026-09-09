@@ -413,6 +413,106 @@ router.post('/', async (req, res) => {
   }
 });
 
+// UPDATE Invoice (Super Admin only - e.g. a negotiated discount adjustment)
+router.put('/:id', optionalAuth, async (req, res) => {
+  try {
+    if (req.user && req.user.role === 'staff') {
+      return res.status(403).json({ error: 'Only a Super Admin can edit an invoice.' });
+    }
+    const { id } = req.params;
+    const data = req.body;
+
+    const updated = await withTransaction(async (conn) => {
+      const [rows] = await conn.query('SELECT * FROM invoices WHERE id = ?', [id]);
+      if (rows.length === 0) return null;
+      const inv = rows[0];
+
+      // Replace line items if a new set was provided
+      let subtotal = Number(inv.subtotal) || 0;
+      if (Array.isArray(data.items)) {
+        subtotal = data.items.reduce((sum, it) => sum + (Number(it.quantity || 1) * Number(it.price || 0)), 0);
+        await conn.query('DELETE FROM invoice_items WHERE invoice_id = ?', [id]);
+        for (let i = 0; i < data.items.length; i++) {
+          const item = data.items[i];
+          const itemId = `invi-${Date.now()}-${i}`;
+          const qty = Number(item.quantity) || 1;
+          const uPrice = Number(item.price) || 0;
+          const tot = qty * uPrice;
+          const itemDesc = item.serviceName || item.description || 'Service';
+          await conn.query(
+            `INSERT INTO invoice_items (id, invoice_id, item_type, description, quantity, unit_price, total, sort_order, created_at)
+             VALUES (?, ?, 'service', ?, ?, ?, ?, ?, NOW())`,
+            [itemId, id, itemDesc, qty, uPrice, tot, i]
+          );
+        }
+      }
+
+      // Paid amount is never edited here - it only ever changes through the
+      // payments endpoint, so the payment ledger always matches what's shown.
+      const discount = data.discount !== undefined ? Math.max(0, Number(data.discount) || 0) : Number(inv.discount) || 0;
+      const grandTotal = Math.max(0, subtotal - discount);
+      const paid = Number(inv.paid) || 0;
+      const due = Math.max(0, grandTotal - paid);
+      let status = 'due';
+      if (due === 0 && grandTotal > 0) status = 'paid';
+      else if (paid > 0) status = 'partial';
+
+      const updates = ['subtotal = ?', 'discount = ?', 'grand_total = ?', 'due = ?', 'status = ?'];
+      const params = [subtotal, discount, grandTotal, due, status];
+
+      if (data.customerName !== undefined) { updates.push('customer_name = ?'); params.push(data.customerName); }
+      if (data.customerPhone !== undefined) { updates.push('customer_phone = ?'); params.push(data.customerPhone); }
+      if (data.vehicleRegistration !== undefined) { updates.push('vehicle_registration = ?'); params.push(data.vehicleRegistration); }
+      if (data.vehicleModel !== undefined) { updates.push('vehicle_model = ?'); params.push(data.vehicleModel); }
+      if (data.date !== undefined) { updates.push('date = ?'); params.push(data.date); }
+      if (data.notes !== undefined) { updates.push('notes = ?'); params.push(data.notes); }
+
+      params.push(id);
+      await conn.query(`UPDATE invoices SET ${updates.join(', ')} WHERE id = ?`, params);
+
+      const [updatedRows] = await conn.query('SELECT * FROM invoices WHERE id = ?', [id]);
+      const [items] = await conn.query(
+        `SELECT id, invoice_id as invoiceId, description as serviceName, description, quantity, unit_price as price, total
+         FROM invoice_items WHERE invoice_id = ? ORDER BY sort_order ASC, created_at ASC`,
+        [id]
+      );
+      const inv2 = updatedRows[0];
+      return {
+        id: inv2.id,
+        invoiceNumber: inv2.invoice_number,
+        date: typeof inv2.date === 'string' ? inv2.date : new Date(inv2.date).toISOString().split('T')[0],
+        customerId: inv2.customer_id,
+        customerName: inv2.customer_name,
+        customerPhone: inv2.customer_phone,
+        vehicleRegistration: inv2.vehicle_registration,
+        vehicleModel: inv2.vehicle_model,
+        subtotal: Number(inv2.subtotal),
+        discount: Number(inv2.discount),
+        grandTotal: Number(inv2.grand_total),
+        paid: Number(inv2.paid),
+        due: Number(inv2.due),
+        status: statusMapToFrontend[inv2.status] || 'Due',
+        paymentMethod: formatPaymentMethod(inv2.payment_method),
+        notes: inv2.notes,
+        items: items.map(it => ({
+          id: it.id,
+          serviceName: it.serviceName || it.description || 'Service',
+          description: it.description,
+          price: Number(it.price) || 0,
+          quantity: Number(it.quantity) || 1
+        })),
+        createdAt: typeof inv2.created_at === 'string' ? inv2.created_at : new Date(inv2.created_at).toISOString()
+      };
+    });
+
+    if (!updated) return res.status(404).json({ error: 'Invoice not found' });
+    res.json(updated);
+  } catch (error) {
+    console.error('Error updating invoice:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // RECORD PAYMENT FOR INVOICE
 router.post('/:id/payments', async (req, res) => {
   try {

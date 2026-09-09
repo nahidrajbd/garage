@@ -43,7 +43,7 @@ router.get('/', async (req, res) => {
     );
 
     const [items] = await pool.query(
-      `SELECT id, quotation_id as quotationId, description as serviceName, description,
+      `SELECT id, quotation_id as quotationId, service_name as serviceName, description,
               quantity, unit_price as unitPrice, total
        FROM quotation_items ORDER BY sort_order ASC, created_at ASC`
     );
@@ -106,7 +106,7 @@ router.get('/:id', async (req, res) => {
 
     const q = rows[0];
     const [items] = await pool.query(
-      `SELECT id, quotation_id as quotationId, description as serviceName, description,
+      `SELECT id, quotation_id as quotationId, service_name as serviceName, description,
               quantity, unit_price as unitPrice, total
        FROM quotation_items WHERE quotation_id = ? ORDER BY sort_order ASC, created_at ASC`,
       [q.id]
@@ -246,9 +246,9 @@ router.post('/', async (req, res) => {
           const serviceName = item.serviceName || item.description || 'Service';
 
           await conn.query(
-            `INSERT INTO quotation_items (id, quotation_id, item_type, description, quantity, unit_price, total, sort_order, created_at)
-             VALUES (?, ?, 'service', ?, ?, ?, ?, ?, NOW())`,
-            [itemId, qId, serviceName, qty, uPrice, tot, i]
+            `INSERT INTO quotation_items (id, quotation_id, item_type, service_name, description, quantity, unit_price, total, sort_order, created_at)
+             VALUES (?, ?, 'service', ?, ?, ?, ?, ?, ?, NOW())`,
+            [itemId, qId, serviceName, item.description || null, qty, uPrice, tot, i]
           );
 
           createdItems.push({
@@ -327,9 +327,9 @@ router.put('/:id', async (req, res) => {
           const sName = item.serviceName || item.description || 'Service';
 
           await conn.query(
-            `INSERT INTO quotation_items (id, quotation_id, item_type, description, quantity, unit_price, total, sort_order, created_at)
-             VALUES (?, ?, 'service', ?, ?, ?, ?, ?, NOW())`,
-            [itemId, id, sName, qty, uPrice, tot, i]
+            `INSERT INTO quotation_items (id, quotation_id, item_type, service_name, description, quantity, unit_price, total, sort_order, created_at)
+             VALUES (?, ?, 'service', ?, ?, ?, ?, ?, ?, NOW())`,
+            [itemId, id, sName, item.description || null, qty, uPrice, tot, i]
           );
         }
       }
@@ -433,11 +433,11 @@ router.post('/:id/convert', async (req, res) => {
         await conn.query(
           `INSERT INTO invoice_items (id, invoice_id, item_type, description, quantity, unit_price, total, sort_order, created_at)
            VALUES (?, ?, 'service', ?, ?, ?, ?, ?, NOW())`,
-          [itemId, invoiceId, it.description, it.quantity, it.unit_price, it.total, i]
+          [itemId, invoiceId, it.service_name, it.quantity, it.unit_price, it.total, i]
         );
         createdItems.push({
           id: itemId,
-          serviceName: it.description,
+          serviceName: it.service_name,
           price: Number(it.unit_price),
           quantity: Number(it.quantity)
         });

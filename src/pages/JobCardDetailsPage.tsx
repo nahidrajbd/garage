@@ -415,6 +415,20 @@ export const JobCardDetailsPage: React.FC = () => {
           </div>
         )}
 
+        {/* Blank Handwritten Notes Table */}
+        <div className="py-4 border-b border-gray-200">
+          <table className="w-full border-collapse text-xs">
+            <tbody>
+              {Array.from({ length: 6 }).map((_, idx) => (
+                <tr key={idx}>
+                  <td className="border border-gray-300 h-9 w-1/2"></td>
+                  <td className="border border-gray-300 h-9 w-1/2"></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
         {/* Signatures & Footer */}
         <div className="mt-12 pt-6 border-t border-gray-200 grid grid-cols-2 gap-6 text-xs text-gray-500">
           <div className="text-center sm:text-left">
