@@ -53,12 +53,13 @@ export const CreateInvoicePage: React.FC = () => {
 
   // Invoice Items
   const [items, setItems] = useState<InvoiceItem[]>([
-    { id: '1', serviceName: 'Full Periodic Car Servicing', price: 5000, quantity: 1 }
+    { id: '1', serviceName: 'Foam Wash', price: 500, quantity: 1 }
   ]);
 
   // Financials
   const [discount, setDiscount] = useState<string>('0');
-  const [paid, setPaid] = useState<string>('5000');
+  const [paid, setPaid] = useState<string>('500');
+  const [paidTouched, setPaidTouched] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('Cash');
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -227,6 +228,15 @@ export const CreateInvoicePage: React.FC = () => {
   const discountNum = Math.max(0, parseFloat(discount) || 0);
   const grandTotal = Math.max(0, subtotal - discountNum);
 
+  // Assume the invoice is being paid in full by default - keep "Amount Paid"
+  // tracking Grand Total as services/discount change, until the staff
+  // deliberately types a different (e.g. partial) amount themselves.
+  useEffect(() => {
+    if (!id && !paidTouched) {
+      setPaid(grandTotal.toString());
+    }
+  }, [grandTotal, id, paidTouched]);
+
   // In edit mode, "paid" is whatever was already recorded via real payments -
   // it isn't editable from this form, only the payments endpoint changes it.
   const paidNum = id ? existingPaid : Math.max(0, parseFloat(paid) || 0);
@@ -241,10 +251,12 @@ export const CreateInvoicePage: React.FC = () => {
 
   // Set paid to full automatically if user wants full paid
   const setFullPaid = () => {
+    setPaidTouched(false);
     setPaid(grandTotal.toString());
   };
 
   const setZeroPaid = () => {
+    setPaidTouched(true);
     setPaid('0');
   };
 
@@ -736,7 +748,7 @@ export const CreateInvoicePage: React.FC = () => {
                     min="0"
                     step="any"
                     value={paid}
-                    onChange={e => setPaid(e.target.value)}
+                    onChange={e => { setPaidTouched(true); setPaid(e.target.value); }}
                     className="w-full text-right px-2 py-1.5 border border-emerald-400 bg-emerald-50/50 rounded-md font-bold text-sm text-emerald-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                   />
                 </div>
