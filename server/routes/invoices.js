@@ -417,7 +417,7 @@ router.post('/', async (req, res) => {
 router.post('/:id/payments', async (req, res) => {
   try {
     const { id } = req.params;
-    const { amount, paymentMethod = 'Cash', note } = req.body;
+    const { amount, paymentMethod = 'Cash', note, date } = req.body;
     const paymentAmount = Number(amount);
 
     if (isNaN(paymentAmount) || paymentAmount <= 0) {
@@ -450,13 +450,13 @@ router.post('/:id/payments', async (req, res) => {
       // Insert payment record
       const paymentId = `pmt-${Date.now()}`;
       const pMethod = normalizePaymentMethod(paymentMethod);
-      const today = new Date().toISOString().split('T')[0];
+      const paymentDate = date || new Date().toISOString().split('T')[0];
       const timeStr = new Date().toTimeString().split(' ')[0];
 
       await conn.query(
         `INSERT INTO payments (id, invoice_id, amount, payment_method, payment_date, payment_time, reference, note, created_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
-        [paymentId, inv.id, paymentAmount, pMethod, today, timeStr, inv.invoice_number, note || `Due collection for invoice ${inv.invoice_number}`]
+        [paymentId, inv.id, paymentAmount, pMethod, paymentDate, timeStr, inv.invoice_number, note || `Due collection for invoice ${inv.invoice_number}`]
       );
 
       // Insert exactly one financial transaction in ledger
@@ -467,7 +467,7 @@ router.post('/:id/payments', async (req, res) => {
         ) VALUES (?, ?, ?, 'INCOME', 'Service Payment', ?, ?, ?, 'invoice_payment', ?, ?, NOW())`,
         [
           `tx-${Date.now()}`,
-          today,
+          paymentDate,
           timeStr,
           `Due Collection - ${inv.customer_name || 'Customer'} (${inv.vehicle_model || 'Vehicle'})`,
           pMethod,

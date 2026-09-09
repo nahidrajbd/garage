@@ -245,14 +245,15 @@ export const api = {
   },
 
   async recordDuePayment(
-    invoiceId: string, 
-    amount: number, 
-    paymentMethod: 'Cash' | 'bKash' | 'Bank', 
-    note?: string
+    invoiceId: string,
+    amount: number,
+    paymentMethod: 'Cash' | 'bKash' | 'Bank',
+    note?: string,
+    date?: string
   ): Promise<Invoice | null> {
     return request<Invoice>(`/invoices/${invoiceId}/payments`, {
       method: 'POST',
-      body: JSON.stringify({ amount, paymentMethod, note }),
+      body: JSON.stringify({ amount, paymentMethod, note, date }),
     });
   },
 

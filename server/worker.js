@@ -2121,7 +2121,7 @@ export default {
           const newDue = Math.max(0, grandTotal - newPaid);
           const newStatus = newDue === 0 ? 'paid' : 'partial';
           const pMethod = (body.paymentMethod || 'cash').toLowerCase();
-          const today = new Date().toISOString().split('T')[0];
+          const paymentDate = body.date || new Date().toISOString().split('T')[0];
           const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
           await conn.query('UPDATE invoices SET paid = ?, due = ?, status = ? WHERE id = ?', [newPaid, newDue, newStatus, inv.id]);
@@ -2134,13 +2134,13 @@ export default {
           await conn.query(
             `INSERT INTO payments (id, invoice_id, amount, payment_method, payment_date, reference, note, created_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
-            [paymentId, inv.id, paymentAmount, pMethod, today, inv.invoice_number, body.note || `Due collection for invoice ${inv.invoice_number}`]
+            [paymentId, inv.id, paymentAmount, pMethod, paymentDate, inv.invoice_number, body.note || `Due collection for invoice ${inv.invoice_number}`]
           );
 
           await conn.query(
             `INSERT INTO financial_transactions (id, date, time, type, category, description, payment_method, amount, reference_type, reference_id, notes, created_at)
              VALUES (?, ?, ?, 'INCOME', 'Service Payment', ?, ?, ?, 'invoice_payment', ?, ?, NOW())`,
-            [`tx-${Date.now()}`, today, timeStr, `Due Collection - ${inv.customer_name || 'Customer'} (${inv.vehicle_model || 'Vehicle'})`, pMethod, paymentAmount, inv.invoice_number, body.note || `Due payment collection for ${inv.invoice_number}`]
+            [`tx-${Date.now()}`, paymentDate, timeStr, `Due Collection - ${inv.customer_name || 'Customer'} (${inv.vehicle_model || 'Vehicle'})`, pMethod, paymentAmount, inv.invoice_number, body.note || `Due payment collection for ${inv.invoice_number}`]
           );
 
           return { ...inv, paid: newPaid, due: newDue, status: statusMapToFrontend[newStatus] || 'Paid' };

@@ -12,6 +12,7 @@ export const RecordPaymentModal: React.FC = () => {
 
   const [paymentAmount, setPaymentAmount] = useState<string>('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('Cash');
+  const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [note, setNote] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -19,6 +20,7 @@ export const RecordPaymentModal: React.FC = () => {
     if (paymentModalInvoice) {
       setPaymentAmount(paymentModalInvoice.due.toString());
       setPaymentMethod('Cash');
+      setPaymentDate(new Date().toISOString().split('T')[0]);
       setNote(`Due payment collected for ${paymentModalInvoice.invoiceNumber}`);
     }
   }, [paymentModalInvoice]);
@@ -44,7 +46,8 @@ export const RecordPaymentModal: React.FC = () => {
         paymentModalInvoice.id,
         amountNum,
         paymentMethod,
-        note.trim() || undefined
+        note.trim() || undefined,
+        paymentDate
       );
 
       showToast(`Payment of ${formatBDT(amountNum)} recorded for ${paymentModalInvoice.invoiceNumber}!`, 'success');
@@ -115,6 +118,22 @@ export const RecordPaymentModal: React.FC = () => {
               * Remaining due after this payment: {formatBDT(paymentModalInvoice.due - (parseFloat(paymentAmount) || 0))}
             </p>
           )}
+        </div>
+
+        {/* Payment Date */}
+        <div>
+          <label className="block text-xs font-semibold text-gray-700 mb-1">
+            Payment Date
+          </label>
+          <input
+            type="date"
+            value={paymentDate}
+            onChange={e => setPaymentDate(e.target.value)}
+            className="w-full text-xs sm:text-sm px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+          />
+          <p className="text-[11px] text-gray-400 mt-1">
+            Defaults to today — change this if the payment was actually collected on a different date.
+          </p>
         </div>
 
         {/* Payment Method */}
