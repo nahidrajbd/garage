@@ -244,6 +244,13 @@ export const api = {
     });
   },
 
+  async updateInvoice(id: string, invoiceData: Partial<Invoice>): Promise<Invoice> {
+    return request<Invoice>(`/invoices/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(invoiceData),
+    });
+  },
+
   async recordDuePayment(
     invoiceId: string, 
     amount: number, 

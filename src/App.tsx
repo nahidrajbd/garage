@@ -59,6 +59,7 @@ export const App: React.FC = () => {
               <Route path="quotations/edit/:id" element={<CreateQuotationPage />} />
               <Route path="invoices" element={<InvoicesPage />} />
               <Route path="invoices/new" element={<CreateInvoicePage />} />
+              <Route path="invoices/edit/:id" element={<CreateInvoicePage />} />
               <Route path="invoices/:id" element={<InvoiceDetailsPage />} />
               <Route path="customers" element={<CustomersPage />} />
               <Route path="inventory" element={<InventoryPage />} />

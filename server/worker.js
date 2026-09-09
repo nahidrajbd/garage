@@ -2101,6 +2101,104 @@ export default {
       }
     }
 
+    if (path.match(/^\/api\/invoices\/[^/]+$/) && method === 'PUT') {
+      const user = getUser(request, env);
+      if (user && user.role === 'staff') {
+        return jsonResponse({ error: 'Only a Super Admin can edit an invoice.' }, 403, corsHeaders);
+      }
+      try {
+        const id = path.split('/')[3];
+        const body = await request.json();
+
+        const updated = await withTransaction(env, async (conn) => {
+          const [rows] = await conn.query('SELECT * FROM invoices WHERE id = ?', [id]);
+          if (rows.length === 0) return null;
+          const inv = rows[0];
+
+          // Replace line items if a new set was provided
+          let subtotal = Number(inv.subtotal) || 0;
+          if (Array.isArray(body.items)) {
+            subtotal = body.items.reduce((sum, it) => sum + (Number(it.quantity || 1) * Number(it.price ?? it.unitPrice) || 0), 0);
+            await conn.query('DELETE FROM invoice_items WHERE invoice_id = ?', [id]);
+            for (let i = 0; i < body.items.length; i++) {
+              const item = body.items[i];
+              const qty = Number(item.quantity) || 1;
+              const uPrice = Number(item.price ?? item.unitPrice) || 0;
+              const itemDesc = item.serviceName || item.description || 'Service';
+              await conn.query(
+                `INSERT INTO invoice_items (id, invoice_id, item_type, description, quantity, unit_price, total, sort_order, created_at)
+                 VALUES (?, ?, 'service', ?, ?, ?, ?, ?, NOW())`,
+                [`invi-${Date.now()}-${i}`, id, itemDesc, qty, uPrice, qty * uPrice, i]
+              );
+            }
+          }
+
+          // Paid amount only ever changes through the payments endpoint, so
+          // the payment ledger always matches what's shown here.
+          const discount = body.discount !== undefined ? Math.max(0, Number(body.discount) || 0) : Number(inv.discount) || 0;
+          const grandTotal = Math.max(0, subtotal - discount);
+          const paid = Number(inv.paid) || 0;
+          const due = Math.max(0, grandTotal - paid);
+          const status = due === 0 && grandTotal > 0 ? 'paid' : paid > 0 ? 'partial' : 'due';
+
+          const updates = ['subtotal = ?', 'discount = ?', 'grand_total = ?', 'due = ?', 'status = ?'];
+          const params = [subtotal, discount, grandTotal, due, status];
+          if (body.customerName !== undefined) { updates.push('customer_name = ?'); params.push(body.customerName); }
+          if (body.customerPhone !== undefined) { updates.push('customer_phone = ?'); params.push(body.customerPhone); }
+          if (body.vehicleRegistration !== undefined) { updates.push('vehicle_registration = ?'); params.push(body.vehicleRegistration); }
+          if (body.vehicleModel !== undefined) { updates.push('vehicle_model = ?'); params.push(body.vehicleModel); }
+          if (body.date !== undefined) { updates.push('date = ?'); params.push(body.date); }
+          if (body.notes !== undefined) { updates.push('notes = ?'); params.push(body.notes); }
+          params.push(id);
+          await conn.query(`UPDATE invoices SET ${updates.join(', ')} WHERE id = ?`, params);
+
+          const [updatedRows] = await conn.query('SELECT * FROM invoices WHERE id = ?', [id]);
+          const inv2 = updatedRows[0];
+          const [items] = await conn.query('SELECT * FROM invoice_items WHERE invoice_id = ? ORDER BY sort_order ASC', [id]);
+          const [payments] = await conn.query('SELECT * FROM payments WHERE invoice_id = ? ORDER BY payment_date ASC', [id]);
+
+          return {
+            id: inv2.id,
+            invoiceNumber: inv2.invoice_number,
+            customerId: inv2.customer_id,
+            customerName: inv2.customer_name,
+            customerPhone: inv2.customer_phone,
+            vehicleRegistration: inv2.vehicle_registration,
+            vehicleModel: inv2.vehicle_model,
+            date: inv2.date,
+            subtotal: Number(inv2.subtotal),
+            discount: Number(inv2.discount),
+            grandTotal: Number(inv2.grand_total),
+            paid: Number(inv2.paid),
+            due: Number(inv2.due),
+            status: inv2.status === 'paid' ? 'Paid' : inv2.status === 'partial' ? 'Partial' : 'Due',
+            paymentMethod: inv2.payment_method,
+            notes: inv2.notes,
+            items: items.map((i) => ({
+              id: i.id,
+              serviceName: i.description || 'Service',
+              description: i.description,
+              quantity: Number(i.quantity),
+              price: Number(i.unit_price),
+              total: Number(i.total),
+            })),
+            payments: payments.map((p) => ({
+              id: p.id,
+              amount: Number(p.amount),
+              method: p.payment_method === 'bkash' ? 'bKash' : p.payment_method === 'bank' ? 'Bank' : 'Cash',
+              date: p.payment_date,
+              reference: p.reference,
+            })),
+          };
+        });
+
+        if (!updated) return jsonResponse({ error: 'Invoice not found' }, 404, corsHeaders);
+        return jsonResponse(updated, 200, corsHeaders);
+      } catch (err) {
+        return jsonResponse({ error: err.message }, 500, corsHeaders);
+      }
+    }
+
     if (path.match(/^\/api\/invoices\/[^/]+\/payments$/) && method === 'POST') {
       try {
         const id = path.split('/')[3];

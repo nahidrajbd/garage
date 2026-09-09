@@ -1,20 +1,21 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { 
-  Plus, 
-  Trash2, 
-  Save, 
-  Printer, 
-  ArrowLeft, 
-  User, 
-  Car, 
-  Wrench, 
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import {
+  Plus,
+  Trash2,
+  Save,
+  Printer,
+  ArrowLeft,
+  User,
+  Car,
+  Wrench,
   Calculator,
   CheckCircle2,
   AlertCircle
 } from 'lucide-react';
 import { InvoiceStatusBadge } from '../components/common/Badge';
 import { useApp } from '../context/AppContext';
+import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
 import { 
   Customer, 
@@ -28,15 +29,18 @@ import { formatBDT, normalizePhoneDigits } from '../utils/formatters';
 
 export const CreateInvoicePage: React.FC = () => {
   const navigate = useNavigate();
+  const { id } = useParams<{ id?: string }>();
   const [searchParams] = useSearchParams();
   const fromJobCardId = searchParams.get('fromJobCard');
   const { showToast, triggerRefresh } = useApp();
+  const { isSuperAdmin } = useAuth();
 
   // Reference Data
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [servicesCatalog, setServicesCatalog] = useState<ServiceItem[]>([]);
   const [invoicesCount, setInvoicesCount] = useState(0);
   const [linkedJobCard, setLinkedJobCard] = useState<JobCard | null>(null);
+  const [existingPaid, setExistingPaid] = useState(0);
 
   // Form State
   const [invoiceNumber, setInvoiceNumber] = useState('');
@@ -59,6 +63,14 @@ export const CreateInvoicePage: React.FC = () => {
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Only a Super Admin may edit an existing invoice
+  useEffect(() => {
+    if (id && !isSuperAdmin) {
+      showToast('Only a Super Admin can edit an invoice.', 'error');
+      navigate(`/invoices/${id}`, { replace: true });
+    }
+  }, [id, isSuperAdmin, navigate, showToast]);
+
   useEffect(() => {
     const initData = async () => {
       try {
@@ -70,6 +82,26 @@ export const CreateInvoicePage: React.FC = () => {
         setCustomers(custList);
         setServicesCatalog(srvList);
         setInvoicesCount(invList.length);
+
+        if (id) {
+          // Edit existing invoice
+          const existing = await api.getInvoiceById(id);
+          if (existing) {
+            setInvoiceNumber(existing.invoiceNumber);
+            setDate(existing.date);
+            setCustomerName(existing.customerName);
+            setCustomerPhone(existing.customerPhone);
+            setVehicleReg(existing.vehicleRegistration);
+            setVehicleModel(existing.vehicleModel);
+            if (existing.customerId) setSelectedCustomerId(existing.customerId);
+            setItems(existing.items);
+            setDiscount(existing.discount.toString());
+            setPaymentMethod(existing.paymentMethod);
+            setNotes(existing.notes || '');
+            setExistingPaid(existing.paid);
+          }
+          return;
+        }
 
         if (fromJobCardId) {
           const jc = await api.getJobCardById(fromJobCardId);
@@ -106,7 +138,7 @@ export const CreateInvoicePage: React.FC = () => {
       }
     };
     initData();
-  }, [fromJobCardId]);
+  }, [id, fromJobCardId]);
 
   // Customer Selection Auto-fill
   const handleSelectCustomer = (customerId: string) => {
@@ -195,7 +227,9 @@ export const CreateInvoicePage: React.FC = () => {
   const discountNum = Math.max(0, parseFloat(discount) || 0);
   const grandTotal = Math.max(0, subtotal - discountNum);
 
-  const paidNum = Math.max(0, parseFloat(paid) || 0);
+  // In edit mode, "paid" is whatever was already recorded via real payments -
+  // it isn't editable from this form, only the payments endpoint changes it.
+  const paidNum = id ? existingPaid : Math.max(0, parseFloat(paid) || 0);
   const due = Math.max(0, grandTotal - paidNum);
 
   const calculatedStatus: InvoiceStatus = useMemo(() => {
@@ -231,6 +265,33 @@ export const CreateInvoicePage: React.FC = () => {
 
     setIsSubmitting(true);
     try {
+      const itemsPayload = items.map(i => ({
+        id: i.id,
+        serviceName: i.serviceName.trim(),
+        price: Number(i.price),
+        quantity: Number(i.quantity) || 1
+      }));
+
+      if (id) {
+        // Edit existing invoice - paid/due/status recompute server-side from
+        // the already-recorded paid amount, not from this form.
+        await api.updateInvoice(id, {
+          date,
+          customerName: customerName.trim(),
+          customerPhone: customerPhone.trim(),
+          vehicleRegistration: vehicleReg.trim(),
+          vehicleModel: vehicleModel.trim() || 'Vehicle',
+          items: itemsPayload,
+          discount: discountNum,
+          notes: notes.trim() || undefined
+        });
+
+        showToast(`Invoice ${invoiceNumber} updated successfully!`, 'success');
+        triggerRefresh();
+        navigate(andPrint ? `/invoices/${id}?print=true` : `/invoices/${id}`);
+        return;
+      }
+
       const created = await api.createInvoice({
         invoiceNumber,
         date,
@@ -239,12 +300,7 @@ export const CreateInvoicePage: React.FC = () => {
         customerPhone: customerPhone.trim(),
         vehicleRegistration: vehicleReg.trim(),
         vehicleModel: vehicleModel.trim() || 'Vehicle',
-        items: items.map(i => ({
-          id: i.id,
-          serviceName: i.serviceName.trim(),
-          price: Number(i.price),
-          quantity: Number(i.quantity) || 1
-        })),
+        items: itemsPayload,
         subtotal,
         discount: discountNum,
         grandTotal,
@@ -271,7 +327,7 @@ export const CreateInvoicePage: React.FC = () => {
       }
     } catch (err) {
       console.error(err);
-      showToast('Failed to create invoice', 'error');
+      showToast(id ? 'Failed to update invoice' : 'Failed to create invoice', 'error');
     } finally {
       setIsSubmitting(false);
     }
@@ -292,10 +348,12 @@ export const CreateInvoicePage: React.FC = () => {
           </button>
           <div>
             <h2 className="text-xl sm:text-2xl font-bold font-heading text-gray-900 tracking-tight">
-              Create New Invoice
+              {id ? 'Edit Invoice' : 'Create New Invoice'}
             </h2>
             <p className="text-xs text-gray-500">
-              Generate itemized service bill with live payment and due calculations
+              {id
+                ? 'Super Admin edit — adjust items, discount, or details (e.g. a negotiated price cut)'
+                : 'Generate itemized service bill with live payment and due calculations'}
             </p>
           </div>
         </div>
@@ -303,7 +361,11 @@ export const CreateInvoicePage: React.FC = () => {
         <div className="flex items-center gap-3">
           <div className="text-right">
             <span className="text-xs text-gray-400 font-mono">Invoice Number</span>
-            <p className="font-mono text-base font-bold text-gray-400 italic">Assigned on save</p>
+            {id ? (
+              <p className="font-mono text-base font-bold text-gray-900">{invoiceNumber}</p>
+            ) : (
+              <p className="font-mono text-base font-bold text-gray-400 italic">Assigned on save</p>
+            )}
           </div>
         </div>
       </div>
@@ -563,50 +625,63 @@ export const CreateInvoicePage: React.FC = () => {
             Payment & Settlement
           </h3>
 
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1">
-              Payment Method <span className="text-rose-500">*</span>
-            </label>
-            <div className="grid grid-cols-3 gap-2">
-              {(['Cash', 'bKash', 'Bank'] as PaymentMethod[]).map(method => (
-                <button
-                  key={method}
-                  type="button"
-                  onClick={() => setPaymentMethod(method)}
-                  className={`py-2 text-xs font-semibold rounded-lg border transition-all ${
-                    paymentMethod === method
-                      ? 'bg-gray-900 text-white border-gray-900 shadow-xs'
-                      : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
-                  }`}
-                >
-                  {method}
-                </button>
-              ))}
+          {id ? (
+            <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 text-xs flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <p>
+                Amount paid (<strong>{formatBDT(existingPaid)}</strong>) isn't changed here — use
+                "Collect Due" on the invoice page to record an actual payment. Editing here only
+                changes the items, discount, or details.
+              </p>
             </div>
-          </div>
+          ) : (
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">
+                Payment Method <span className="text-rose-500">*</span>
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {(['Cash', 'bKash', 'Bank'] as PaymentMethod[]).map(method => (
+                  <button
+                    key={method}
+                    type="button"
+                    onClick={() => setPaymentMethod(method)}
+                    className={`py-2 text-xs font-semibold rounded-lg border transition-all ${
+                      paymentMethod === method
+                        ? 'bg-gray-900 text-white border-gray-900 shadow-xs'
+                        : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
+                    }`}
+                  >
+                    {method}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Quick Pay Buttons */}
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1.5">
-              Quick Paid Amount Helpers
-            </label>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={setFullPaid}
-                className="px-3 py-1.5 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-lg transition-colors"
-              >
-                Full Paid ({formatBDT(grandTotal)})
-              </button>
-              <button
-                type="button"
-                onClick={setZeroPaid}
-                className="px-3 py-1.5 text-xs font-semibold text-rose-800 bg-rose-50 hover:bg-rose-100 border border-rose-300 rounded-lg transition-colors"
-              >
-                Full Due (৳0 Paid)
-              </button>
+          {!id && (
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+                Quick Paid Amount Helpers
+              </label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={setFullPaid}
+                  className="px-3 py-1.5 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 rounded-lg transition-colors"
+                >
+                  Full Paid ({formatBDT(grandTotal)})
+                </button>
+                <button
+                  type="button"
+                  onClick={setZeroPaid}
+                  className="px-3 py-1.5 text-xs font-semibold text-rose-800 bg-rose-50 hover:bg-rose-100 border border-rose-300 rounded-lg transition-colors"
+                >
+                  Full Due (৳0 Paid)
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
           <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 flex items-center justify-between">
             <span className="text-xs font-bold text-gray-700">Calculated Invoice Status:</span>
@@ -651,17 +726,21 @@ export const CreateInvoicePage: React.FC = () => {
 
             {/* Paid Amount */}
             <div className="pt-2 border-t border-gray-100 flex justify-between items-center">
-              <span className="font-semibold text-emerald-800">Amount Paid Now (৳):</span>
-              <div className="w-32">
-                <input
-                  type="number"
-                  min="0"
-                  step="any"
-                  value={paid}
-                  onChange={e => setPaid(e.target.value)}
-                  className="w-full text-right px-2 py-1.5 border border-emerald-400 bg-emerald-50/50 rounded-md font-bold text-sm text-emerald-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
-                />
-              </div>
+              <span className="font-semibold text-emerald-800">{id ? 'Already Paid (৳):' : 'Amount Paid Now (৳):'}</span>
+              {id ? (
+                <span className="font-bold text-sm text-emerald-800">{formatBDT(existingPaid)}</span>
+              ) : (
+                <div className="w-32">
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={paid}
+                    onChange={e => setPaid(e.target.value)}
+                    className="w-full text-right px-2 py-1.5 border border-emerald-400 bg-emerald-50/50 rounded-md font-bold text-sm text-emerald-800 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                  />
+                </div>
+              )}
             </div>
 
             {/* Due Amount */}
@@ -679,7 +758,7 @@ export const CreateInvoicePage: React.FC = () => {
       <div className="flex flex-col sm:flex-row items-center justify-end gap-3 pt-4 bg-white p-5 rounded-2xl border border-gray-200/80 shadow-2xs">
         <button
           type="button"
-          onClick={() => navigate('/invoices')}
+          onClick={() => navigate(id ? `/invoices/${id}` : '/invoices')}
           disabled={isSubmitting}
           className="w-full sm:w-auto px-5 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors text-center"
         >
@@ -693,7 +772,7 @@ export const CreateInvoicePage: React.FC = () => {
           className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-2.5 text-sm font-bold text-gray-900 bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded-xl transition-all shadow-2xs"
         >
           <Save className="w-4 h-4" />
-          <span>{isSubmitting ? 'Saving...' : 'Save Invoice'}</span>
+          <span>{isSubmitting ? 'Saving...' : id ? 'Save Changes' : 'Save Invoice'}</span>
         </button>
 
         <button
@@ -703,7 +782,7 @@ export const CreateInvoicePage: React.FC = () => {
           className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-7 py-2.5 text-sm font-bold text-white bg-[#C1121F] hover:bg-[#9E0E19] active:bg-[#800C15] rounded-xl transition-all shadow-xs"
         >
           <Printer className="w-4 h-4" />
-          <span>Save & Print Invoice</span>
+          <span>{id ? 'Save & Print' : 'Save & Print Invoice'}</span>
         </button>
       </div>
     </div>
