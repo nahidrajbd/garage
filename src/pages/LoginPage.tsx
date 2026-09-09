@@ -60,11 +60,7 @@ export const LoginPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#0F0F0F] flex flex-col justify-between text-gray-100 selection:bg-[#C1121F] selection:text-white relative overflow-hidden">
-      {/* Dynamic Background Glows */}
-      <div className="absolute -top-40 -left-40 w-96 h-96 bg-[#C1121F]/20 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute top-1/2 -right-40 w-96 h-96 bg-red-800/15 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute -bottom-40 left-1/3 w-96 h-96 bg-neutral-800/30 rounded-full blur-3xl pointer-events-none" />
+    <div className="min-h-screen bg-[radial-gradient(circle_at_50%_45%,#ffffff_0%,#fbc7cb_18%,#e0525f_42%,#C1121F_65%,#6b0710_100%)] flex flex-col justify-between text-gray-100 selection:bg-white selection:text-[#C1121F] relative overflow-hidden">
 
       {/* Top Brand Bar */}
       <header className="p-6 flex items-center justify-between z-10">
