@@ -116,12 +116,9 @@ export const ReportsPage: React.FC = () => {
 
       const dayCashIn = cashInList.filter(c => c.date === dateStr);
       const dayExpenses = expenses.filter(e => e.date === dateStr);
-      // Use createdAt (when the invoice was actually made), not the editable
-      // invoice date on the document, so backdated invoices don't skew the count.
-      const dayInvoices = invoices.filter(inv => {
-        const createdDate = new Date(inv.createdAt).toLocaleDateString('en-CA', { timeZone: 'Asia/Dhaka' });
-        return createdDate === dateStr;
-      });
+      // Count by the invoice's own date field, so a late-night save that
+      // crosses midnight still counts for the day it's dated, not the day it was clicked Save.
+      const dayInvoices = invoices.filter(inv => inv.date?.slice(0, 10) === dateStr);
 
       days.push({
         date: dateStr,
@@ -162,10 +159,7 @@ export const ReportsPage: React.FC = () => {
       const dateStr = `${selectedMonth}-${String(day).padStart(2, '0')}`;
       const dayCashIn = cashInList.filter(c => c.date === dateStr);
       const dayExpenses = expenses.filter(e => e.date === dateStr);
-      const dayInvoices = invoices.filter(inv => {
-        const createdDate = new Date(inv.createdAt).toLocaleDateString('en-CA', { timeZone: 'Asia/Dhaka' });
-        return createdDate === dateStr;
-      });
+      const dayInvoices = invoices.filter(inv => inv.date?.slice(0, 10) === dateStr);
 
       rows.push({
         date: dateStr,
