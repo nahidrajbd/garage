@@ -1912,7 +1912,7 @@ export default {
               grandTotal: Number(inv.grand_total),
               paid: Number(inv.paid),
               due: Number(inv.due),
-              status: inv.status === 'paid' ? 'Paid' : inv.status === 'partial' ? 'Partial' : 'Due',
+              status: inv.status === 'paid' ? 'Paid' : inv.status === 'partial' ? 'Partial' : inv.status === 'draft' ? 'Draft' : 'Due',
               paymentMethod: inv.payment_method === 'bkash' ? 'bKash' : inv.payment_method === 'bank' ? 'Bank' : 'Cash',
               payments,
               notes: inv.notes,
@@ -1950,7 +1950,7 @@ export default {
             grandTotal: Number(inv.grand_total),
             paid: Number(inv.paid),
             due: Number(inv.due),
-            status: inv.status === 'paid' ? 'Paid' : inv.status === 'partial' ? 'Partial' : 'Due',
+            status: inv.status === 'paid' ? 'Paid' : inv.status === 'partial' ? 'Partial' : inv.status === 'draft' ? 'Draft' : 'Due',
             paymentMethod: inv.payment_method,
             items: items.map((i) => ({
               id: i.id,
@@ -1999,9 +1999,12 @@ export default {
           }
 
           const grandTotal = Number(body.grandTotal) || 0;
-          const paid = Number(body.paid) || 0;
+          const isDraft = body.status === 'Draft';
+          // Draft invoices haven't been finalized, so no payment is recorded
+          // yet regardless of what the form shows - that happens on finalize.
+          const paid = isDraft ? 0 : Number(body.paid) || 0;
           const due = Math.max(0, grandTotal - paid);
-          const status = due === 0 ? 'paid' : paid > 0 ? 'partial' : 'due';
+          const status = isDraft ? 'draft' : due === 0 ? 'paid' : paid > 0 ? 'partial' : 'due';
           const pMethod = (body.paymentMethod || 'cash').toLowerCase();
 
           // Auto-link or create the customer/vehicle if the invoice wasn't
@@ -2093,7 +2096,8 @@ export default {
             await queueReviewSms(conn, { id: invId, customer_phone: body.customerPhone });
           }
 
-          return { id: invId, invoiceNumber, ...body, customerId, vehicleId, grandTotal, paid, due, status };
+          const statusForFrontend = status === 'paid' ? 'Paid' : status === 'partial' ? 'Partial' : status === 'draft' ? 'Draft' : 'Due';
+          return { id: invId, invoiceNumber, ...body, customerId, vehicleId, grandTotal, paid, due, status: statusForFrontend };
         });
         return jsonResponse(created, 201, corsHeaders);
       } catch (err) {
@@ -2103,17 +2107,23 @@ export default {
 
     if (path.match(/^\/api\/invoices\/[^/]+$/) && method === 'PUT') {
       const user = getUser(request, env);
-      if (user && user.role === 'staff') {
-        return jsonResponse({ error: 'Only a Super Admin can edit an invoice.' }, 403, corsHeaders);
-      }
       try {
         const id = path.split('/')[3];
         const body = await request.json();
+
+        if (user && user.role === 'staff') {
+          const [existingRows] = await withDb(env, (conn) => conn.query('SELECT status FROM invoices WHERE id = ?', [id]));
+          if (existingRows.length === 0) return jsonResponse({ error: 'Invoice not found' }, 404, corsHeaders);
+          if (existingRows[0].status !== 'draft') {
+            return jsonResponse({ error: 'Staff can only edit invoices that are still in Draft.' }, 403, corsHeaders);
+          }
+        }
 
         const updated = await withTransaction(env, async (conn) => {
           const [rows] = await conn.query('SELECT * FROM invoices WHERE id = ?', [id]);
           if (rows.length === 0) return null;
           const inv = rows[0];
+          const wasDraft = inv.status === 'draft';
 
           // Replace line items if a new set was provided
           let subtotal = Number(inv.subtotal) || 0;
@@ -2133,22 +2143,32 @@ export default {
             }
           }
 
-          // Paid amount only ever changes through the payments endpoint, so
-          // the payment ledger always matches what's shown here.
+          // Paid amount only ever changes through the payments endpoint for a
+          // normal invoice, so the ledger always matches what's shown here. A
+          // Draft invoice is the exception: it has no payment/ledger records
+          // yet, so its Paid amount can move freely until finalized (saved as
+          // something other than Draft).
           const discount = body.discount !== undefined ? Math.max(0, Number(body.discount) || 0) : Number(inv.discount) || 0;
           const grandTotal = Math.max(0, subtotal - discount);
-          const paid = Number(inv.paid) || 0;
-          const due = Math.max(0, grandTotal - paid);
-          const status = due === 0 && grandTotal > 0 ? 'paid' : paid > 0 ? 'partial' : 'due';
+          const stayingDraft = wasDraft && body.status === 'Draft';
+          const finalizingDraft = wasDraft && body.status !== 'Draft';
 
-          const updates = ['subtotal = ?', 'discount = ?', 'grand_total = ?', 'due = ?', 'status = ?'];
-          const params = [subtotal, discount, grandTotal, due, status];
+          let paid = Number(inv.paid) || 0;
+          if (wasDraft) {
+            paid = Math.min(grandTotal, Math.max(0, Number(body.paid) || 0));
+          }
+          const due = Math.max(0, grandTotal - paid);
+          const status = stayingDraft ? 'draft' : (due === 0 && grandTotal > 0 ? 'paid' : paid > 0 ? 'partial' : 'due');
+
+          const updates = ['subtotal = ?', 'discount = ?', 'grand_total = ?', 'paid = ?', 'due = ?', 'status = ?'];
+          const params = [subtotal, discount, grandTotal, paid, due, status];
           if (body.customerName !== undefined) { updates.push('customer_name = ?'); params.push(body.customerName); }
           if (body.customerPhone !== undefined) { updates.push('customer_phone = ?'); params.push(body.customerPhone); }
           if (body.vehicleRegistration !== undefined) { updates.push('vehicle_registration = ?'); params.push(body.vehicleRegistration); }
           if (body.vehicleModel !== undefined) { updates.push('vehicle_model = ?'); params.push(body.vehicleModel); }
           if (body.date !== undefined) { updates.push('date = ?'); params.push(body.date); }
           if (body.notes !== undefined) { updates.push('notes = ?'); params.push(body.notes); }
+          if (body.paymentMethod !== undefined) { updates.push('payment_method = ?'); params.push(String(body.paymentMethod).toLowerCase()); }
           params.push(id);
           await conn.query(`UPDATE invoices SET ${updates.join(', ')} WHERE id = ?`, params);
 
@@ -2161,6 +2181,24 @@ export default {
               `UPDATE financial_transactions SET date = ?
                WHERE reference_type = 'invoice_payment' AND reference_id = ?`,
               [body.date, inv.invoice_number]
+            );
+          }
+
+          // Finalizing a Draft records its first payment now, since Draft
+          // invoices skip payments/ledger entirely until they leave Draft.
+          if (finalizingDraft && paid > 0) {
+            const paymentDate = body.date !== undefined ? body.date : inv.date;
+            const pMethod = body.paymentMethod ? String(body.paymentMethod).toLowerCase() : (inv.payment_method || 'cash');
+            const pmtId = `pmt-${Date.now()}`;
+            await conn.query(
+              `INSERT INTO payments (id, invoice_id, amount, payment_method, payment_date, reference, note, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
+              [pmtId, id, paid, pMethod, paymentDate, inv.invoice_number, 'Initial Payment']
+            );
+            await conn.query(
+              `INSERT INTO financial_transactions (id, date, time, type, category, description, payment_method, amount, reference_type, reference_id, notes, created_at)
+               VALUES (?, ?, ?, 'INCOME', 'Service Payment', ?, ?, ?, 'invoice_payment', ?, ?, NOW())`,
+              [`tx-${Date.now()}`, paymentDate, null, `Payment for invoice ${inv.invoice_number}`, pMethod, paid, inv.invoice_number, 'Initial payment received']
             );
           }
 
@@ -2183,7 +2221,7 @@ export default {
             grandTotal: Number(inv2.grand_total),
             paid: Number(inv2.paid),
             due: Number(inv2.due),
-            status: inv2.status === 'paid' ? 'Paid' : inv2.status === 'partial' ? 'Partial' : 'Due',
+            status: inv2.status === 'paid' ? 'Paid' : inv2.status === 'partial' ? 'Partial' : inv2.status === 'draft' ? 'Draft' : 'Due',
             paymentMethod: inv2.payment_method,
             notes: inv2.notes,
             items: items.map((i) => ({

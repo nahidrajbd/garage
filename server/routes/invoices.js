@@ -8,13 +8,15 @@ const statusMapToFrontend = {
   due: 'Due',
   partial: 'Partial',
   paid: 'Paid',
-  cancelled: 'Due'
+  cancelled: 'Due',
+  draft: 'Draft'
 };
 
 const statusMapToDb = {
   'Due': 'due',
   'Partial': 'partial',
-  'Paid': 'paid'
+  'Paid': 'paid',
+  'Draft': 'draft'
 };
 
 const formatPaymentMethod = (method) => {
@@ -284,11 +286,16 @@ router.post('/', async (req, res) => {
       }
       const discount = Number(data.discount) || 0;
       const grandTotal = Math.max(0, calculatedSubtotal - discount);
-      const paid = Math.min(grandTotal, Math.max(0, Number(data.paid) || 0));
+      const isDraft = data.status === 'Draft';
+      // Draft invoices haven't been finalized, so no payment is recorded yet
+      // regardless of what the form shows - that happens when it's finalized.
+      const paid = isDraft ? 0 : Math.min(grandTotal, Math.max(0, Number(data.paid) || 0));
       const due = Math.max(0, grandTotal - paid);
 
       let status = 'due';
-      if (due === 0 && grandTotal > 0) {
+      if (isDraft) {
+        status = 'draft';
+      } else if (due === 0 && grandTotal > 0) {
         status = 'paid';
       } else if (paid > 0) {
         status = 'partial';
@@ -413,19 +420,25 @@ router.post('/', async (req, res) => {
   }
 });
 
-// UPDATE Invoice (Super Admin only - e.g. a negotiated discount adjustment)
+// UPDATE Invoice (Super Admin can always edit; Staff can only edit Draft invoices)
 router.put('/:id', optionalAuth, async (req, res) => {
   try {
-    if (req.user && req.user.role === 'staff') {
-      return res.status(403).json({ error: 'Only a Super Admin can edit an invoice.' });
-    }
     const { id } = req.params;
     const data = req.body;
+
+    if (req.user && req.user.role === 'staff') {
+      const [existing] = await pool.query('SELECT status FROM invoices WHERE id = ?', [id]);
+      if (existing.length === 0) return res.status(404).json({ error: 'Invoice not found' });
+      if (existing[0].status !== 'draft') {
+        return res.status(403).json({ error: 'Staff can only edit invoices that are still in Draft.' });
+      }
+    }
 
     const updated = await withTransaction(async (conn) => {
       const [rows] = await conn.query('SELECT * FROM invoices WHERE id = ?', [id]);
       if (rows.length === 0) return null;
       const inv = rows[0];
+      const wasDraft = inv.status === 'draft';
 
       // Replace line items if a new set was provided
       let subtotal = Number(inv.subtotal) || 0;
@@ -447,18 +460,33 @@ router.put('/:id', optionalAuth, async (req, res) => {
         }
       }
 
-      // Paid amount is never edited here - it only ever changes through the
-      // payments endpoint, so the payment ledger always matches what's shown.
+      // Paid amount is never edited here for a normal invoice - it only ever
+      // changes through the payments endpoint, so the ledger always matches
+      // what's shown. A Draft invoice is the exception: it has no payment or
+      // ledger records yet, so its Paid amount can move freely until it's
+      // finalized (saved as something other than Draft).
       const discount = data.discount !== undefined ? Math.max(0, Number(data.discount) || 0) : Number(inv.discount) || 0;
       const grandTotal = Math.max(0, subtotal - discount);
-      const paid = Number(inv.paid) || 0;
-      const due = Math.max(0, grandTotal - paid);
-      let status = 'due';
-      if (due === 0 && grandTotal > 0) status = 'paid';
-      else if (paid > 0) status = 'partial';
+      const stayingDraft = wasDraft && data.status === 'Draft';
+      const finalizingDraft = wasDraft && data.status !== 'Draft';
 
-      const updates = ['subtotal = ?', 'discount = ?', 'grand_total = ?', 'due = ?', 'status = ?'];
-      const params = [subtotal, discount, grandTotal, due, status];
+      let paid = Number(inv.paid) || 0;
+      if (wasDraft) {
+        paid = Math.min(grandTotal, Math.max(0, Number(data.paid) || 0));
+      }
+      const due = Math.max(0, grandTotal - paid);
+
+      let status = 'due';
+      if (stayingDraft) {
+        status = 'draft';
+      } else if (due === 0 && grandTotal > 0) {
+        status = 'paid';
+      } else if (paid > 0) {
+        status = 'partial';
+      }
+
+      const updates = ['subtotal = ?', 'discount = ?', 'grand_total = ?', 'paid = ?', 'due = ?', 'status = ?'];
+      const params = [subtotal, discount, grandTotal, paid, due, status];
 
       if (data.customerName !== undefined) { updates.push('customer_name = ?'); params.push(data.customerName); }
       if (data.customerPhone !== undefined) { updates.push('customer_phone = ?'); params.push(data.customerPhone); }
@@ -466,6 +494,7 @@ router.put('/:id', optionalAuth, async (req, res) => {
       if (data.vehicleModel !== undefined) { updates.push('vehicle_model = ?'); params.push(data.vehicleModel); }
       if (data.date !== undefined) { updates.push('date = ?'); params.push(data.date); }
       if (data.notes !== undefined) { updates.push('notes = ?'); params.push(data.notes); }
+      if (data.paymentMethod !== undefined) { updates.push('payment_method = ?'); params.push(normalizePaymentMethod(data.paymentMethod)); }
 
       params.push(id);
       await conn.query(`UPDATE invoices SET ${updates.join(', ')} WHERE id = ?`, params);
@@ -479,6 +508,37 @@ router.put('/:id', optionalAuth, async (req, res) => {
           `UPDATE financial_transactions SET date = ?
            WHERE reference_type = 'invoice_payment' AND reference_id = ?`,
           [data.date, inv.invoice_number]
+        );
+      }
+
+      // Finalizing a Draft records its first payment now, since Draft
+      // invoices skip payments/ledger entirely until they leave Draft.
+      if (finalizingDraft && paid > 0) {
+        const paymentDate = data.date !== undefined ? data.date : (typeof inv.date === 'string' ? inv.date : new Date(inv.date).toISOString().split('T')[0]);
+        const pMethod = data.paymentMethod ? normalizePaymentMethod(data.paymentMethod) : (inv.payment_method || 'cash');
+        const paymentId = `pmt-${Date.now()}`;
+
+        await conn.query(
+          `INSERT INTO payments (id, invoice_id, amount, payment_method, payment_date, payment_time, reference, note, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+          [paymentId, id, paid, pMethod, paymentDate, new Date().toTimeString().slice(0, 8), inv.invoice_number, `Initial payment for ${inv.invoice_number}`]
+        );
+
+        await conn.query(
+          `INSERT INTO financial_transactions (
+            id, date, time, type, category, description, payment_method,
+            amount, reference_type, reference_id, notes, created_at
+          ) VALUES (?, ?, ?, 'INCOME', 'Service Payment', ?, ?, ?, 'invoice_payment', ?, ?, NOW())`,
+          [
+            `tx-${Date.now()}`,
+            paymentDate,
+            new Date().toTimeString().slice(0, 8),
+            `Service Payment - ${data.vehicleModel !== undefined ? data.vehicleModel : inv.vehicle_model} (${data.customerName !== undefined ? data.customerName : inv.customer_name})`,
+            pMethod,
+            paid,
+            inv.invoice_number,
+            `Initial payment received for invoice ${inv.invoice_number}`
+          ]
         );
       }
 

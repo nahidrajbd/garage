@@ -26,7 +26,7 @@ export interface Technician {
 
 export type PaymentMethod = 'Cash' | 'bKash' | 'Bank';
 
-export type InvoiceStatus = 'Paid' | 'Partial' | 'Due';
+export type InvoiceStatus = 'Draft' | 'Paid' | 'Partial' | 'Due';
 
 export type QuotationStatus = 
   | 'Draft'

@@ -86,6 +86,18 @@ async function migrate() {
       console.log('✅ job_cards.status simplified.');
     }
 
+    // Add 'draft' to invoices.status so staff can save unfinished invoices
+    const [invStatusColRows] = await connection.query(`
+      SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'invoices' AND COLUMN_NAME = 'status'
+    `);
+    const currentInvStatusType = invStatusColRows[0]?.COLUMN_TYPE || '';
+    if (currentInvStatusType && !currentInvStatusType.includes('draft')) {
+      console.log('🔄 Adding draft status to invoices.status...');
+      await connection.query(`ALTER TABLE invoices MODIFY COLUMN status ENUM('due', 'partial', 'paid', 'cancelled', 'draft') NOT NULL DEFAULT 'due'`);
+      console.log('✅ invoices.status now supports draft.');
+    }
+
     // Ensure leads table supports Facebook-sourced leads (no phone, has a PSID)
     const [leadCols] = await connection.query(`
       SELECT COLUMN_NAME, IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS

@@ -170,7 +170,7 @@ CREATE TABLE IF NOT EXISTS invoices (
   total DECIMAL(12,2) NOT NULL DEFAULT 0.00,
   paid_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
   due_amount DECIMAL(12,2) NOT NULL DEFAULT 0.00,
-  status ENUM('due', 'partial', 'paid', 'cancelled') NOT NULL DEFAULT 'due',
+  status ENUM('due', 'partial', 'paid', 'cancelled', 'draft') NOT NULL DEFAULT 'due',
   payment_method VARCHAR(50) NOT NULL DEFAULT 'Cash',
   notes TEXT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
