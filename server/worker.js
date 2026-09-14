@@ -2610,7 +2610,7 @@ export default {
               await conn.query(
                 `INSERT INTO quotation_items (id, quotation_id, item_type, service_name, description, quantity, unit_price, total, sort_order, created_at)
                  VALUES (?, ?, 'service', ?, ?, ?, ?, ?, ?, NOW())`,
-                [itemId, qId, serviceName, item.description || null, qty, uPrice, tot, i]
+                [itemId, qId, serviceName, item.description || '', qty, uPrice, tot, i]
               );
 
               createdItems.push({
@@ -2689,7 +2689,7 @@ export default {
               await conn.query(
                 `INSERT INTO quotation_items (id, quotation_id, item_type, service_name, description, quantity, unit_price, total, sort_order, created_at)
                  VALUES (?, ?, 'service', ?, ?, ?, ?, ?, ?, NOW())`,
-                [itemId, id, sName, item.description || null, qty, uPrice, tot, i]
+                [itemId, id, sName, item.description || '', qty, uPrice, tot, i]
               );
             }
           }
