@@ -69,6 +69,7 @@ CREATE TABLE IF NOT EXISTS job_cards (
   status ENUM('in_progress', 'completed') NOT NULL DEFAULT 'in_progress',
   customer_complaint TEXT NULL,
   vehicle_condition TEXT NULL,
+  damage_markers TEXT NULL,
   assigned_to VARCHAR(100) NULL,
   notes TEXT NULL,
   quotation_id VARCHAR(50) NULL,

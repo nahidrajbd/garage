@@ -406,6 +406,17 @@ async function migrate() {
       console.log('✅ Leads seeded.');
     }
 
+    // Vehicle Condition / Damage Diagram - stores clicked marker points as JSON
+    const [jcCols] = await connection.query(`
+      SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'job_cards'
+    `);
+    const jcColNames = jcCols.map(c => c.COLUMN_NAME);
+    if (!jcColNames.includes('damage_markers')) {
+      await connection.query('ALTER TABLE job_cards ADD COLUMN damage_markers TEXT NULL AFTER vehicle_condition');
+      console.log('✅ Added job_cards.damage_markers column.');
+    }
+
     console.log('🎉 Migration and initial seeding completed successfully!');
   } catch (error) {
     console.error('❌ Migration error:', error.message);

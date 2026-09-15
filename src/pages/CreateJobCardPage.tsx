@@ -18,11 +18,13 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { api } from '../services/api';
-import { 
-  Customer, 
-  ServiceItem, 
-  JobCardWorkItem, 
-  JobCardStatus 
+import VehicleDamageDiagram from '../components/common/VehicleDamageDiagram';
+import {
+  Customer,
+  ServiceItem,
+  JobCardWorkItem,
+  JobCardStatus,
+  DamageMarker
 } from '../types';
 import { generateJobCardNumber, normalizePhoneDigits } from '../utils/formatters';
 
@@ -53,6 +55,7 @@ export const CreateJobCardPage: React.FC = () => {
 
   const [customerComplaint, setCustomerComplaint] = useState('');
   const [vehicleCondition, setVehicleCondition] = useState('');
+  const [damageMarkers, setDamageMarkers] = useState<DamageMarker[]>([]);
   const [assignedTo, setAssignedTo] = useState('Technician 1 (Karim - Engine)');
   const [notes, setNotes] = useState('');
 
@@ -102,6 +105,7 @@ export const CreateJobCardPage: React.FC = () => {
             setCustomerComplaint(existing.customerComplaint);
             setWorkItems(existing.requiredWork || []);
             setVehicleCondition(existing.vehicleCondition || '');
+            setDamageMarkers(existing.damageMarkers || []);
             setAssignedTo(existing.assignedTo);
             setNotes(existing.notes || '');
             setBeforePhotos(existing.beforePhotos || []);
@@ -250,6 +254,7 @@ export const CreateJobCardPage: React.FC = () => {
           description: w.description?.trim() || ''
         })),
         vehicleCondition: vehicleCondition.trim() || undefined,
+        damageMarkers,
         assignedTo,
         beforePhotos,
         afterPhotos,
@@ -596,6 +601,7 @@ export const CreateJobCardPage: React.FC = () => {
           placeholder="e.g. Existing deep scratch on rear left door. Front bumper right side clip broken. Customer informed before vehicle intake."
           className="w-full text-xs sm:text-sm px-3.5 py-2 border border-gray-300 rounded-xl focus:ring-1 focus:ring-red-500 focus:outline-none"
         />
+        <VehicleDamageDiagram markers={damageMarkers} onChange={setDamageMarkers} />
       </div>
 
       {/* Vehicle Photos (Before / After Mock Upload) */}

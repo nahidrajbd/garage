@@ -155,6 +155,13 @@ export interface JobCardWorkItem {
   description?: string;
 }
 
+export interface DamageMarker {
+  id: string;
+  x: number; // percentage 0-100, position on the vehicle diagram
+  y: number; // percentage 0-100
+  note: string;
+}
+
 export interface JobCard {
   id: string;
   jobCardNumber: string;      // e.g. "JC-0001"
@@ -171,6 +178,7 @@ export interface JobCard {
   customerComplaint: string;
   requiredWork: JobCardWorkItem[];
   vehicleCondition?: string;
+  damageMarkers?: DamageMarker[];
   assignedTo: string;         // Technician 1, Service Team, etc.
   beforePhotos?: string[];
   afterPhotos?: string[];

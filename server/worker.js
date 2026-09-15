@@ -1650,6 +1650,7 @@ export default {
                     j.mileage, DATE_FORMAT(j.date, '%Y-%m-%d') as date,
                     DATE_FORMAT(j.expected_delivery_date, '%Y-%m-%d') as expectedDeliveryDate,
                     j.status, j.customer_complaint as customerComplaint, j.vehicle_condition as vehicleCondition,
+                    j.damage_markers as damageMarkers,
                     j.assigned_to as assignedTo, j.notes,
                     j.quotation_id as quotationId, j.invoice_id as invoiceId,
                     j.created_at as createdAt, j.updated_at as updatedAt
@@ -1665,6 +1666,7 @@ export default {
             requiredWork: items.filter((it) => it.jobCardId === j.id),
             beforePhotos: photos.filter((p) => p.jobCardId === j.id && p.photoType === 'before').map((p) => p.filePath),
             afterPhotos: photos.filter((p) => p.jobCardId === j.id && p.photoType === 'after').map((p) => p.filePath),
+            damageMarkers: j.damageMarkers ? JSON.parse(j.damageMarkers) : [],
             createdAt: typeof j.createdAt === 'string' ? j.createdAt : new Date(j.createdAt).toISOString(),
           }));
         });
@@ -1685,6 +1687,7 @@ export default {
                     j.mileage, DATE_FORMAT(j.date, '%Y-%m-%d') as date,
                     DATE_FORMAT(j.expected_delivery_date, '%Y-%m-%d') as expectedDeliveryDate,
                     j.status, j.customer_complaint as customerComplaint, j.vehicle_condition as vehicleCondition,
+                    j.damage_markers as damageMarkers,
                     j.assigned_to as assignedTo, j.notes,
                     j.quotation_id as quotationId, j.invoice_id as invoiceId,
                     j.created_at as createdAt, j.updated_at as updatedAt
@@ -1703,6 +1706,7 @@ export default {
             requiredWork: items || [],
             beforePhotos: photos.filter((p) => p.photoType === 'before').map((p) => p.filePath),
             afterPhotos: photos.filter((p) => p.photoType === 'after').map((p) => p.filePath),
+            damageMarkers: jc.damageMarkers ? JSON.parse(jc.damageMarkers) : [],
             createdAt: typeof jc.createdAt === 'string' ? jc.createdAt : new Date(jc.createdAt).toISOString(),
           };
         });
@@ -1768,9 +1772,9 @@ export default {
             `INSERT INTO job_cards (
               id, job_card_number, customer_id, vehicle_id, customer_name, customer_phone,
               vehicle_registration, vehicle_model, mileage, date, expected_delivery_date,
-              status, customer_complaint, vehicle_condition, assigned_to, notes,
+              status, customer_complaint, vehicle_condition, damage_markers, assigned_to, notes,
               quotation_id, invoice_id, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
             [
               jcId,
               jcNumber,
@@ -1786,6 +1790,7 @@ export default {
               dbStatus,
               data.customerComplaint || null,
               data.vehicleCondition || null,
+              Array.isArray(data.damageMarkers) && data.damageMarkers.length > 0 ? JSON.stringify(data.damageMarkers) : null,
               data.assignedTo || null,
               data.notes || null,
               data.quotationId || null,
@@ -1874,7 +1879,7 @@ export default {
             `UPDATE job_cards SET
               customer_name = ?, customer_phone = ?, vehicle_registration = ?, vehicle_model = ?,
               mileage = ?, date = ?, expected_delivery_date = ?, status = ?, customer_complaint = ?,
-              vehicle_condition = ?, assigned_to = ?, notes = ?, quotation_id = ?, invoice_id = ?,
+              vehicle_condition = ?, damage_markers = ?, assigned_to = ?, notes = ?, quotation_id = ?, invoice_id = ?,
               updated_at = NOW()
              WHERE id = ?`,
             [
@@ -1888,6 +1893,7 @@ export default {
               dbStatus,
               data.customerComplaint || null,
               data.vehicleCondition || null,
+              Array.isArray(data.damageMarkers) && data.damageMarkers.length > 0 ? JSON.stringify(data.damageMarkers) : null,
               data.assignedTo || null,
               data.notes || null,
               data.quotationId || null,

@@ -26,6 +26,7 @@ router.get('/', async (req, res) => {
               j.mileage, DATE_FORMAT(j.date, '%Y-%m-%d') as date,
               DATE_FORMAT(j.expected_delivery_date, '%Y-%m-%d') as expectedDeliveryDate,
               j.status, j.customer_complaint as customerComplaint, j.vehicle_condition as vehicleCondition,
+              j.damage_markers as damageMarkers,
               j.assigned_to as assignedTo, j.notes,
               j.quotation_id as quotationId, q.quotation_number as quotationNumber,
               j.invoice_id as invoiceId, i.invoice_number as invoiceNumber,
@@ -70,6 +71,7 @@ router.get('/', async (req, res) => {
       requiredWork: itemMap[j.id] || [],
       beforePhotos: beforePhotosMap[j.id] || [],
       afterPhotos: afterPhotosMap[j.id] || [],
+      damageMarkers: j.damageMarkers ? JSON.parse(j.damageMarkers) : [],
       createdAt: typeof j.createdAt === 'string' ? j.createdAt : new Date(j.createdAt).toISOString()
     }));
 
@@ -91,6 +93,7 @@ router.get('/:id', async (req, res) => {
               j.mileage, DATE_FORMAT(j.date, '%Y-%m-%d') as date,
               DATE_FORMAT(j.expected_delivery_date, '%Y-%m-%d') as expectedDeliveryDate,
               j.status, j.customer_complaint as customerComplaint, j.vehicle_condition as vehicleCondition,
+              j.damage_markers as damageMarkers,
               j.assigned_to as assignedTo, j.notes,
               j.quotation_id as quotationId, q.quotation_number as quotationNumber,
               j.invoice_id as invoiceId, i.invoice_number as invoiceNumber,
@@ -125,6 +128,7 @@ router.get('/:id', async (req, res) => {
       requiredWork: items || [],
       beforePhotos: photos.filter(p => p.photoType === 'before').map(p => p.filePath),
       afterPhotos: photos.filter(p => p.photoType === 'after').map(p => p.filePath),
+      damageMarkers: jc.damageMarkers ? JSON.parse(jc.damageMarkers) : [],
       createdAt: typeof jc.createdAt === 'string' ? jc.createdAt : new Date(jc.createdAt).toISOString()
     });
   } catch (error) {
@@ -181,9 +185,9 @@ router.post('/', optionalAuth, async (req, res) => {
         `INSERT INTO job_cards (
           id, job_card_number, customer_id, vehicle_id, customer_name, customer_phone,
           vehicle_registration, vehicle_model, mileage, date, expected_delivery_date,
-          status, customer_complaint, vehicle_condition, assigned_to, notes,
+          status, customer_complaint, vehicle_condition, damage_markers, assigned_to, notes,
           quotation_id, invoice_id, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
         [
           jcId,
           data.jobCardNumber,
@@ -198,7 +202,7 @@ router.post('/', optionalAuth, async (req, res) => {
           data.expectedDeliveryDate || null,
           dbStatus,
           data.customerComplaint || null,
-          data.vehicleCondition || null,
+          Array.isArray(data.damageMarkers) && data.damageMarkers.length > 0 ? JSON.stringify(data.damageMarkers) : null,
           data.assignedTo || null,
           data.notes || null,
           data.quotationId || null,
@@ -300,6 +304,7 @@ router.put('/:id', optionalAuth, async (req, res) => {
       if (data.expectedDeliveryDate !== undefined) { updates.push('expected_delivery_date = ?'); params.push(data.expectedDeliveryDate); }
       if (data.customerComplaint !== undefined) { updates.push('customer_complaint = ?'); params.push(data.customerComplaint); }
       if (data.vehicleCondition !== undefined) { updates.push('vehicle_condition = ?'); params.push(data.vehicleCondition); }
+      if (data.damageMarkers !== undefined) { updates.push('damage_markers = ?'); params.push(Array.isArray(data.damageMarkers) && data.damageMarkers.length > 0 ? JSON.stringify(data.damageMarkers) : null); }
       if (data.assignedTo !== undefined) { updates.push('assigned_to = ?'); params.push(data.assignedTo); }
       if (data.notes !== undefined) { updates.push('notes = ?'); params.push(data.notes); }
       if (data.quotationId !== undefined) { updates.push('quotation_id = ?'); params.push(data.quotationId); }
@@ -345,6 +350,7 @@ router.patch('/:id/status', optionalAuth, async (req, res) => {
               j.mileage, DATE_FORMAT(j.date, '%Y-%m-%d') as date,
               DATE_FORMAT(j.expected_delivery_date, '%Y-%m-%d') as expectedDeliveryDate,
               j.status, j.customer_complaint as customerComplaint, j.vehicle_condition as vehicleCondition,
+              j.damage_markers as damageMarkers,
               j.assigned_to as assignedTo, j.notes,
               j.quotation_id as quotationId, q.quotation_number as quotationNumber,
               j.invoice_id as invoiceId, i.invoice_number as invoiceNumber,
@@ -386,6 +392,7 @@ router.patch('/:id/status', optionalAuth, async (req, res) => {
       requiredWork: items || [],
       beforePhotos: photos.filter(p => p.photoType === 'before').map(p => p.filePath),
       afterPhotos: photos.filter(p => p.photoType === 'after').map(p => p.filePath),
+      damageMarkers: jc.damageMarkers ? JSON.parse(jc.damageMarkers) : [],
       createdAt: typeof jc.createdAt === 'string' ? jc.createdAt : new Date(jc.createdAt).toISOString()
     });
   } catch (error) {

@@ -18,6 +18,7 @@ import { JobCardStatusBadge } from '../components/common/Badge';
 import { useApp } from '../context/AppContext';
 import { api } from '../services/api';
 import { JobCard, Settings, JobCardStatus } from '../types';
+import vehicleDiagram from '../assets/diagram.svg';
 import { formatDate } from '../utils/formatters';
 
 export const JobCardDetailsPage: React.FC = () => {
@@ -399,21 +400,31 @@ export const JobCardDetailsPage: React.FC = () => {
               <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-200 pb-1 mb-1.5">
                 Vehicle Condition / Damage Diagram
               </p>
-              <div className="flex items-center justify-center py-2">
-                <svg viewBox="0 0 200 90" className="w-full max-w-[220px] h-auto text-gray-500" fill="none" stroke="currentColor" strokeWidth="1.5">
-                  <rect x="20" y="20" width="160" height="50" rx="10" />
-                  <rect x="45" y="8" width="90" height="20" rx="6" />
-                  <line x1="60" y1="20" x2="60" y2="70" />
-                  <line x1="140" y1="20" x2="140" y2="70" />
-                  <circle cx="50" cy="72" r="7" />
-                  <circle cx="150" cy="72" r="7" />
-                </svg>
+              <div className="flex items-start gap-2">
+                <div className="relative w-24 shrink-0" style={{ aspectRatio: '448 / 524' }}>
+                  <img src={vehicleDiagram} alt="Vehicle diagram" className="w-full h-full object-contain" />
+                  {(jobCard.damageMarkers || []).map((m, idx) => (
+                    <div
+                      key={m.id}
+                      className="absolute w-3.5 h-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-red-600 text-white text-[8px] font-bold flex items-center justify-center border border-white"
+                      style={{ left: `${m.x}%`, top: `${m.y}%` }}
+                    >
+                      {idx + 1}
+                    </div>
+                  ))}
+                </div>
+                <div className="flex-1 space-y-0.5">
+                  {(jobCard.damageMarkers || []).length === 0 ? (
+                    <p className="text-[9px] text-gray-400 italic">No damage points marked</p>
+                  ) : (
+                    (jobCard.damageMarkers || []).map((m, idx) => (
+                      <p key={m.id} className="text-[9px] text-gray-700 leading-relaxed">
+                        <span className="font-bold">{idx + 1}.</span> {m.note || 'No description'}
+                      </p>
+                    ))
+                  )}
+                </div>
               </div>
-              <p className="text-[9px] text-gray-500 leading-relaxed">
-                Mark affected area(s): Front / Rear Bumper, Bonnet, Roof, L/R Doors, L/R Fenders, Trunk —
-                <span className="italic"> note below.</span>
-              </p>
-              <p className="border-b border-gray-300 h-4 mt-1"></p>
             </div>
           </div>
 
