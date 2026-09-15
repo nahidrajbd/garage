@@ -70,10 +70,12 @@ export const InvoicesPage: React.FC = () => {
     });
   }, [invoices, search, statusFilter]);
 
-  // Summaries
-  const totalBilled = useMemo(() => invoices.reduce((sum, i) => sum + i.grandTotal, 0), [invoices]);
-  const totalPaid = useMemo(() => invoices.reduce((sum, i) => sum + i.paid, 0), [invoices]);
-  const totalDue = useMemo(() => invoices.reduce((sum, i) => sum + i.due, 0), [invoices]);
+  // Summaries - Draft invoices aren't finalized yet, so they're excluded
+  // from billed/paid/due totals until they're finalized.
+  const finalizedInvoices = useMemo(() => invoices.filter(i => i.status !== 'Draft'), [invoices]);
+  const totalBilled = useMemo(() => finalizedInvoices.reduce((sum, i) => sum + i.grandTotal, 0), [finalizedInvoices]);
+  const totalPaid = useMemo(() => finalizedInvoices.reduce((sum, i) => sum + i.paid, 0), [finalizedInvoices]);
+  const totalDue = useMemo(() => finalizedInvoices.reduce((sum, i) => sum + i.due, 0), [finalizedInvoices]);
   const dueCount = useMemo(() => invoices.filter(i => i.status === 'Due' || i.status === 'Partial').length, [invoices]);
 
   const handleDelete = async () => {
@@ -162,7 +164,7 @@ export const InvoicesPage: React.FC = () => {
 
         {/* Status Filter Tabs */}
         <div className="flex items-center gap-1.5 p-1 bg-gray-100 rounded-xl w-full sm:w-auto overflow-x-auto">
-          {['ALL', 'Paid', 'Partial', 'Due'].map(status => (
+          {['ALL', 'Draft', 'Paid', 'Partial', 'Due'].map(status => (
             <button
               key={status}
               type="button"

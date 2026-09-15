@@ -33,7 +33,7 @@ export const CreateInvoicePage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const fromJobCardId = searchParams.get('fromJobCard');
   const { showToast, triggerRefresh } = useApp();
-  const { isSuperAdmin } = useAuth();
+  const { isStaff } = useAuth();
 
   // Reference Data
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -41,6 +41,7 @@ export const CreateInvoicePage: React.FC = () => {
   const [invoicesCount, setInvoicesCount] = useState(0);
   const [linkedJobCard, setLinkedJobCard] = useState<JobCard | null>(null);
   const [existingPaid, setExistingPaid] = useState(0);
+  const [existingStatus, setExistingStatus] = useState<InvoiceStatus | null>(null);
 
   // Form State
   const [invoiceNumber, setInvoiceNumber] = useState('');
@@ -64,14 +65,6 @@ export const CreateInvoicePage: React.FC = () => {
   const [notes, setNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Only a Super Admin may edit an existing invoice
-  useEffect(() => {
-    if (id && !isSuperAdmin) {
-      showToast('Only a Super Admin can edit an invoice.', 'error');
-      navigate(`/invoices/${id}`, { replace: true });
-    }
-  }, [id, isSuperAdmin, navigate, showToast]);
-
   useEffect(() => {
     const initData = async () => {
       try {
@@ -88,6 +81,11 @@ export const CreateInvoicePage: React.FC = () => {
           // Edit existing invoice
           const existing = await api.getInvoiceById(id);
           if (existing) {
+            if (isStaff && existing.status !== 'Draft') {
+              showToast('Staff can only edit invoices that are still in Draft.', 'error');
+              navigate(`/invoices/${id}`, { replace: true });
+              return;
+            }
             setInvoiceNumber(existing.invoiceNumber);
             setDate(existing.date);
             setCustomerName(existing.customerName);
@@ -97,9 +95,11 @@ export const CreateInvoicePage: React.FC = () => {
             if (existing.customerId) setSelectedCustomerId(existing.customerId);
             setItems(existing.items);
             setDiscount(existing.discount.toString());
+            setPaid(existing.paid.toString());
             setPaymentMethod(existing.paymentMethod);
             setNotes(existing.notes || '');
             setExistingPaid(existing.paid);
+            setExistingStatus(existing.status);
           }
           return;
         }
@@ -139,7 +139,7 @@ export const CreateInvoicePage: React.FC = () => {
       }
     };
     initData();
-  }, [id, fromJobCardId]);
+  }, [id, fromJobCardId, isStaff]);
 
   // Customer Selection Auto-fill
   const handleSelectCustomer = (customerId: string) => {
@@ -237,9 +237,11 @@ export const CreateInvoicePage: React.FC = () => {
     }
   }, [grandTotal, id, paidTouched]);
 
-  // In edit mode, "paid" is whatever was already recorded via real payments -
-  // it isn't editable from this form, only the payments endpoint changes it.
-  const paidNum = id ? existingPaid : Math.max(0, parseFloat(paid) || 0);
+  // In edit mode, "paid" is whatever was already recorded via real payments
+  // and only the payments endpoint changes it - except for a Draft invoice,
+  // which has no real payment recorded yet, so its Paid stays editable here.
+  const isDraftEdit = !!id && existingStatus === 'Draft';
+  const paidNum = (id && !isDraftEdit) ? existingPaid : Math.max(0, parseFloat(paid) || 0);
   const due = Math.max(0, grandTotal - paidNum);
 
   const calculatedStatus: InvoiceStatus = useMemo(() => {
@@ -261,7 +263,7 @@ export const CreateInvoicePage: React.FC = () => {
   };
 
   // Save invoice handler
-  const handleSave = async (andPrint = false) => {
+  const handleSave = async (andPrint = false, saveAsDraft = false) => {
     if (!customerName.trim() || !customerPhone.trim()) {
       showToast('Please provide customer name and phone number', 'error');
       return;
@@ -285,8 +287,11 @@ export const CreateInvoicePage: React.FC = () => {
       }));
 
       if (id) {
-        // Edit existing invoice - paid/due/status recompute server-side from
-        // the already-recorded paid amount, not from this form.
+        // Edit existing invoice - paid/due/status normally recompute server-
+        // side from the already-recorded paid amount, not from this form.
+        // A Draft invoice is the exception: it has no recorded payment yet,
+        // so Paid/status here are sent explicitly (Draft to keep drafting,
+        // or the finalized status to convert it into a real invoice).
         await api.updateInvoice(id, {
           date,
           customerName: customerName.trim(),
@@ -295,10 +300,20 @@ export const CreateInvoicePage: React.FC = () => {
           vehicleModel: vehicleModel.trim() || 'Vehicle',
           items: itemsPayload,
           discount: discountNum,
-          notes: notes.trim() || undefined
+          notes: notes.trim() || undefined,
+          ...(isDraftEdit ? {
+            paid: Math.min(paidNum, grandTotal),
+            paymentMethod,
+            status: saveAsDraft ? 'Draft' : calculatedStatus
+          } : {})
         });
 
-        showToast(`Invoice ${invoiceNumber} updated successfully!`, 'success');
+        showToast(
+          isDraftEdit && !saveAsDraft
+            ? `Invoice ${invoiceNumber} finalized successfully!`
+            : `Invoice ${invoiceNumber} updated successfully!`,
+          'success'
+        );
         triggerRefresh();
         navigate(andPrint ? `/invoices/${id}?print=true` : `/invoices/${id}`);
         return;
@@ -318,7 +333,7 @@ export const CreateInvoicePage: React.FC = () => {
         grandTotal,
         paid: Math.min(paidNum, grandTotal),
         due,
-        status: calculatedStatus,
+        status: saveAsDraft ? 'Draft' : calculatedStatus,
         paymentMethod,
         notes: notes.trim() || undefined,
         jobCardId: linkedJobCard?.id || undefined,
@@ -637,7 +652,7 @@ export const CreateInvoicePage: React.FC = () => {
             Payment & Settlement
           </h3>
 
-          {id ? (
+          {id && !isDraftEdit ? (
             <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 text-xs flex items-start gap-2">
               <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
               <p>
@@ -671,7 +686,7 @@ export const CreateInvoicePage: React.FC = () => {
           )}
 
           {/* Quick Pay Buttons */}
-          {!id && (
+          {(!id || isDraftEdit) && (
             <div>
               <label className="block text-xs font-semibold text-gray-700 mb-1.5">
                 Quick Paid Amount Helpers
@@ -697,7 +712,7 @@ export const CreateInvoicePage: React.FC = () => {
 
           <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 flex items-center justify-between">
             <span className="text-xs font-bold text-gray-700">Calculated Invoice Status:</span>
-            <InvoiceStatusBadge status={calculatedStatus} />
+            <InvoiceStatusBadge status={id && !isDraftEdit ? existingStatus || calculatedStatus : calculatedStatus} />
           </div>
         </div>
 
@@ -738,8 +753,8 @@ export const CreateInvoicePage: React.FC = () => {
 
             {/* Paid Amount */}
             <div className="pt-2 border-t border-gray-100 flex justify-between items-center">
-              <span className="font-semibold text-emerald-800">{id ? 'Already Paid (৳):' : 'Amount Paid Now (৳):'}</span>
-              {id ? (
+              <span className="font-semibold text-emerald-800">{id && !isDraftEdit ? 'Already Paid (৳):' : 'Amount Paid Now (৳):'}</span>
+              {id && !isDraftEdit ? (
                 <span className="font-bold text-sm text-emerald-800">{formatBDT(existingPaid)}</span>
               ) : (
                 <div className="w-32">
@@ -777,6 +792,18 @@ export const CreateInvoicePage: React.FC = () => {
           Cancel
         </button>
 
+        {(!id || isDraftEdit) && (
+          <button
+            type="button"
+            onClick={() => handleSave(false, true)}
+            disabled={isSubmitting}
+            className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-bold text-gray-700 bg-white hover:bg-gray-50 border border-gray-300 rounded-xl transition-all shadow-2xs"
+          >
+            <Save className="w-4 h-4" />
+            <span>{isSubmitting ? 'Saving...' : 'Save as Draft'}</span>
+          </button>
+        )}
+
         <button
           type="button"
           onClick={() => handleSave(false)}
@@ -784,7 +811,9 @@ export const CreateInvoicePage: React.FC = () => {
           className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-2.5 text-sm font-bold text-gray-900 bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded-xl transition-all shadow-2xs"
         >
           <Save className="w-4 h-4" />
-          <span>{isSubmitting ? 'Saving...' : id ? 'Save Changes' : 'Save Invoice'}</span>
+          <span>
+            {isSubmitting ? 'Saving...' : isDraftEdit ? 'Finalize Invoice' : id ? 'Save Changes' : 'Save Invoice'}
+          </span>
         </button>
 
         <button
@@ -794,7 +823,7 @@ export const CreateInvoicePage: React.FC = () => {
           className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-7 py-2.5 text-sm font-bold text-white bg-[#C1121F] hover:bg-[#9E0E19] active:bg-[#800C15] rounded-xl transition-all shadow-xs"
         >
           <Printer className="w-4 h-4" />
-          <span>{id ? 'Save & Print' : 'Save & Print Invoice'}</span>
+          <span>{isDraftEdit ? 'Finalize & Print' : id ? 'Save & Print' : 'Save & Print Invoice'}</span>
         </button>
       </div>
     </div>

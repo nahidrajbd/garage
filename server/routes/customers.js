@@ -1,6 +1,7 @@
 import express from 'express';
 import pool, { withTransaction } from '../db.js';
 import { optionalAuth } from '../middleware/auth.js';
+import { logActivity } from '../utils/activityLog.js';
 
 const router = express.Router();
 
@@ -92,7 +93,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // CREATE Customer
-router.post('/', async (req, res) => {
+router.post('/', optionalAuth, async (req, res) => {
   try {
     const { name, phone, address, email, notes, vehicles = [] } = req.body;
     if (!name || !phone) {
@@ -142,6 +143,15 @@ router.post('/', async (req, res) => {
       };
     });
 
+    await logActivity(null, {
+      user: req.user,
+      action: 'create',
+      entityType: 'customer',
+      entityId: customerId,
+      entityLabel: result.name,
+      description: `${req.user?.name || 'Someone'} added customer ${result.name}`
+    });
+
     res.status(201).json(result);
   } catch (error) {
     console.error('Error creating customer:', error);
@@ -150,7 +160,7 @@ router.post('/', async (req, res) => {
 });
 
 // UPDATE Customer
-router.put('/:id', async (req, res) => {
+router.put('/:id', optionalAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const { name, phone, address, email, notes, vehicles } = req.body;
@@ -195,6 +205,15 @@ router.put('/:id', async (req, res) => {
     const [rows] = await pool.query('SELECT * FROM customers WHERE id = ?', [id]);
     const [custVehicles] = await pool.query('SELECT id, customer_id as customerId, registration_number as registrationNumber, model, model_year as year, color, mileage FROM vehicles WHERE customer_id = ?', [id]);
 
+    await logActivity(null, {
+      user: req.user,
+      action: 'update',
+      entityType: 'customer',
+      entityId: id,
+      entityLabel: rows[0]?.name,
+      description: `${req.user?.name || 'Someone'} edited customer ${rows[0]?.name || id}`
+    });
+
     res.json({
       ...rows[0],
       vehicles: custVehicles
@@ -212,7 +231,18 @@ router.delete('/:id', optionalAuth, async (req, res) => {
       return res.status(403).json({ error: 'Staff users are not permitted to delete customers.' });
     }
     const { id } = req.params;
+    const [rows] = await pool.query('SELECT name FROM customers WHERE id = ?', [id]);
     await pool.query('DELETE FROM customers WHERE id = ?', [id]);
+
+    await logActivity(null, {
+      user: req.user,
+      action: 'delete',
+      entityType: 'customer',
+      entityId: id,
+      entityLabel: rows[0]?.name,
+      description: `${req.user?.name || 'Someone'} deleted customer ${rows[0]?.name || id}`
+    });
+
     res.json({ success: true });
   } catch (error) {
     console.error('Error deleting customer:', error);

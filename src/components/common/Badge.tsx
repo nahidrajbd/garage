@@ -95,7 +95,7 @@ export const Badge: React.FC<BadgeProps> = ({
 };
 
 export const InvoiceStatusBadge: React.FC<{ status: InvoiceStatus }> = ({ status }) => {
-  const variant = status === 'Paid' ? 'paid' : status === 'Partial' ? 'partial' : 'due';
+  const variant = status === 'Paid' ? 'paid' : status === 'Partial' ? 'partial' : status === 'Draft' ? 'draft' : 'due';
   return <Badge variant={variant}>{status}</Badge>;
 };
 

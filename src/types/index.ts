@@ -26,7 +26,7 @@ export interface Technician {
 
 export type PaymentMethod = 'Cash' | 'bKash' | 'Bank';
 
-export type InvoiceStatus = 'Paid' | 'Partial' | 'Due';
+export type InvoiceStatus = 'Draft' | 'Paid' | 'Partial' | 'Due';
 
 export type QuotationStatus = 
   | 'Draft'
@@ -254,6 +254,19 @@ export interface Settings {
   invoicePrefix: string;
   defaultFooterText: string;
   currencySymbol: string;
+}
+
+export interface ActivityLog {
+  id: string;
+  userId?: string;
+  userName: string;
+  userRole: string;
+  action: string;
+  entityType: string;
+  entityId?: string;
+  entityLabel?: string;
+  description: string;
+  createdAt: string;
 }
 
 export interface DashboardMetrics {

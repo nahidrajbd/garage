@@ -31,7 +31,7 @@ export const InvoiceDetailsPage: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { openPaymentModal, refreshTrigger, showToast } = useApp();
-  const { isSuperAdmin } = useAuth();
+  const { isSuperAdmin, isStaff } = useAuth();
 
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -146,7 +146,7 @@ export const InvoiceDetailsPage: React.FC = () => {
         </button>
 
         <div className="flex items-center gap-2">
-          {invoice.due > 0 && (
+          {invoice.due > 0 && invoice.status !== 'Draft' && (
             <button
               type="button"
               onClick={() => openPaymentModal(invoice)}
@@ -157,12 +157,12 @@ export const InvoiceDetailsPage: React.FC = () => {
             </button>
           )}
 
-          {isSuperAdmin && (
+          {(isSuperAdmin || (isStaff && invoice.status === 'Draft')) && (
             <button
               type="button"
               onClick={() => navigate(`/invoices/edit/${invoice.id}`)}
               className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-gray-700 bg-white hover:bg-gray-100 border border-gray-300 rounded-xl transition-colors"
-              title="Super Admin only"
+              title={isSuperAdmin ? undefined : 'Staff can edit while this invoice is still in Draft'}
             >
               <Edit3 className="w-4 h-4 text-gray-500" />
               <span>Edit Invoice</span>

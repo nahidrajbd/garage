@@ -2,6 +2,7 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import pool from '../db.js';
 import { authenticate, requireSuperAdmin } from '../middleware/auth.js';
+import { logActivity } from '../utils/activityLog.js';
 
 const router = express.Router();
 
@@ -49,6 +50,15 @@ router.post('/', async (req, res) => {
       [userId, name.trim(), cleanUsername, hashedPassword, validRole]
     );
 
+    await logActivity(null, {
+      user: req.user,
+      action: 'create',
+      entityType: 'user',
+      entityId: userId,
+      entityLabel: name.trim(),
+      description: `${req.user?.name || 'Someone'} created user ${name.trim()} (${validRole})`
+    });
+
     res.status(201).json({
       id: userId,
       name: name.trim(),
@@ -92,6 +102,15 @@ router.put('/:id', async (req, res) => {
     const [rows] = await pool.query('SELECT id, name, username, role, status FROM users WHERE id = ?', [id]);
     if (rows.length === 0) return res.status(404).json({ error: 'User not found' });
 
+    await logActivity(null, {
+      user: req.user,
+      action: 'update',
+      entityType: 'user',
+      entityId: id,
+      entityLabel: rows[0].name,
+      description: `${req.user?.name || 'Someone'} edited user ${rows[0].name}`
+    });
+
     res.json(rows[0]);
   } catch (error) {
     console.error('Error updating user:', error);
@@ -110,6 +129,16 @@ router.put('/:id/reset-password', async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(password, 10);
     await pool.query('UPDATE users SET password_hash = ?, updated_at = NOW() WHERE id = ?', [hashedPassword, id]);
+
+    const [rows] = await pool.query('SELECT name FROM users WHERE id = ?', [id]);
+    await logActivity(null, {
+      user: req.user,
+      action: 'reset_password',
+      entityType: 'user',
+      entityId: id,
+      entityLabel: rows[0]?.name,
+      description: `${req.user?.name || 'Someone'} reset the password for user ${rows[0]?.name || id}`
+    });
 
     res.json({ success: true, message: 'Password reset successfully' });
   } catch (error) {
@@ -134,7 +163,18 @@ router.delete('/:id', async (req, res) => {
       return res.status(400).json({ error: 'Cannot delete the only remaining active Super Admin.' });
     }
 
+    const [nameRows] = await pool.query('SELECT name FROM users WHERE id = ?', [id]);
     await pool.query('DELETE FROM users WHERE id = ?', [id]);
+
+    await logActivity(null, {
+      user: req.user,
+      action: 'delete',
+      entityType: 'user',
+      entityId: id,
+      entityLabel: nameRows[0]?.name,
+      description: `${req.user?.name || 'Someone'} deleted user ${nameRows[0]?.name || id}`
+    });
+
     res.json({ success: true });
   } catch (error) {
     console.error('Error deleting user:', error);

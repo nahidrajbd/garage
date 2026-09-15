@@ -19,6 +19,7 @@ import metricsRouter from './routes/metrics.js';
 import authRouter from './routes/auth.js';
 import usersRouter from './routes/users.js';
 import techniciansRouter from './routes/technicians.js';
+import activityLogsRouter from './routes/activityLogs.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -57,6 +58,7 @@ app.use('/api/loans', loansRouter);
 app.use('/api/inventory', inventoryRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/metrics', metricsRouter);
+app.use('/api/activity-logs', activityLogsRouter);
 
 // 404 Handler for API
 app.use((req, res) => {
