@@ -256,6 +256,19 @@ export interface Settings {
   currencySymbol: string;
 }
 
+export interface ActivityLog {
+  id: string;
+  userId?: string;
+  userName: string;
+  userRole: string;
+  action: string;
+  entityType: string;
+  entityId?: string;
+  entityLabel?: string;
+  description: string;
+  createdAt: string;
+}
+
 export interface DashboardMetrics {
   todayCashIn: number;
   todayCashOut: number;

@@ -22,7 +22,8 @@ import {
   InventorySummary,
   Technician,
   Lead,
-  LeadStatus
+  LeadStatus,
+  ActivityLog
 } from '../types';
 import { initialStaff } from '../mock/initialData';
 
@@ -96,6 +97,10 @@ export const api = {
 
   async getUsers(): Promise<User[]> {
     return request<User[]>('/users');
+  },
+
+  async getActivityLogs(limit = 200): Promise<ActivityLog[]> {
+    return request<ActivityLog[]>(`/activity-logs?limit=${limit}`);
   },
 
   async createUser(data: { name: string; username: string; password: string; role: UserRole }): Promise<User> {

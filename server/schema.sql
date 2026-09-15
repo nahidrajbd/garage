@@ -444,4 +444,20 @@ CREATE TABLE IF NOT EXISTS sms_queue (
   UNIQUE KEY uniq_sms_reference (reference_type, reference_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- 25. ACTIVITY LOGS (audit trail of key user actions - who did what, when)
+CREATE TABLE IF NOT EXISTS activity_logs (
+  id VARCHAR(50) NOT NULL PRIMARY KEY,
+  user_id VARCHAR(50) NULL,
+  user_name VARCHAR(100) NOT NULL,
+  user_role VARCHAR(20) NOT NULL,
+  action VARCHAR(30) NOT NULL,
+  entity_type VARCHAR(30) NOT NULL,
+  entity_id VARCHAR(50) NULL,
+  entity_label VARCHAR(150) NULL,
+  description VARCHAR(255) NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  INDEX idx_activity_created (created_at),
+  INDEX idx_activity_entity (entity_type, entity_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 SET FOREIGN_KEY_CHECKS = 1;

@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import pool from '../db.js';
 import { authenticate, JWT_SECRET } from '../middleware/auth.js';
+import { logActivity } from '../utils/activityLog.js';
 
 const router = express.Router();
 
@@ -45,6 +46,15 @@ router.post('/login', async (req, res) => {
     };
 
     const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '7d' });
+
+    await logActivity(null, {
+      user: payload,
+      action: 'login',
+      entityType: 'auth',
+      entityId: user.id,
+      entityLabel: user.name,
+      description: `${user.name} logged in`
+    });
 
     res.json({
       token,

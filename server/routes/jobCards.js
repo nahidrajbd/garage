@@ -1,6 +1,7 @@
 import express from 'express';
 import pool, { withTransaction } from '../db.js';
 import { optionalAuth } from '../middleware/auth.js';
+import { logActivity } from '../utils/activityLog.js';
 
 const router = express.Router();
 
@@ -133,7 +134,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // CREATE Job Card
-router.post('/', async (req, res) => {
+router.post('/', optionalAuth, async (req, res) => {
   try {
     const data = req.body;
     const jcId = `jc-${Date.now()}`;
@@ -261,6 +262,15 @@ router.post('/', async (req, res) => {
       };
     });
 
+    await logActivity(null, {
+      user: req.user,
+      action: 'create',
+      entityType: 'job_card',
+      entityId: jcId,
+      entityLabel: data.jobCardNumber,
+      description: `${req.user?.name || 'Someone'} created job card ${data.jobCardNumber}`
+    });
+
     res.status(201).json(result);
   } catch (error) {
     console.error('Error creating job card:', error);
@@ -269,7 +279,7 @@ router.post('/', async (req, res) => {
 });
 
 // UPDATE Job Card
-router.put('/:id', async (req, res) => {
+router.put('/:id', optionalAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const data = req.body;
@@ -302,6 +312,16 @@ router.put('/:id', async (req, res) => {
     });
 
     const [rows] = await pool.query('SELECT * FROM job_cards WHERE id = ?', [id]);
+
+    await logActivity(null, {
+      user: req.user,
+      action: 'update',
+      entityType: 'job_card',
+      entityId: id,
+      entityLabel: rows[0]?.job_card_number,
+      description: `${req.user?.name || 'Someone'} edited job card ${rows[0]?.job_card_number || id}`
+    });
+
     res.json(rows[0]);
   } catch (error) {
     console.error('Error updating job card:', error);
@@ -310,7 +330,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // UPDATE Status
-router.patch('/:id/status', async (req, res) => {
+router.patch('/:id/status', optionalAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
@@ -350,6 +370,15 @@ router.patch('/:id/status', async (req, res) => {
        FROM job_card_photos WHERE job_card_id = ?`,
       [jc.id]
     );
+
+    await logActivity(null, {
+      user: req.user,
+      action: 'status_change',
+      entityType: 'job_card',
+      entityId: jc.id,
+      entityLabel: jc.jobCardNumber,
+      description: `${req.user?.name || 'Someone'} changed job card ${jc.jobCardNumber} status to ${statusMapToFrontend[jc.status] || jc.status}`
+    });
 
     res.json({
       ...jc,
@@ -399,7 +428,18 @@ router.delete('/:id', optionalAuth, async (req, res) => {
       return res.status(403).json({ error: 'Staff users are not permitted to delete job cards.' });
     }
     const { id } = req.params;
+    const [rows] = await pool.query('SELECT job_card_number FROM job_cards WHERE id = ?', [id]);
     await pool.query('DELETE FROM job_cards WHERE id = ?', [id]);
+
+    await logActivity(null, {
+      user: req.user,
+      action: 'delete',
+      entityType: 'job_card',
+      entityId: id,
+      entityLabel: rows[0]?.job_card_number,
+      description: `${req.user?.name || 'Someone'} deleted job card ${rows[0]?.job_card_number || id}`
+    });
+
     res.json({ success: true });
   } catch (error) {
     console.error('Error deleting job card:', error);

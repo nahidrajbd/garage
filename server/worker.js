@@ -118,6 +118,30 @@ function getUser(request, env) {
   }
 }
 
+// Records one row in activity_logs. Never throws - a logging failure should
+// never block the actual action (invoice save, job card update, etc).
+async function logActivity(env, user, { action, entityType, entityId, entityLabel, description }) {
+  try {
+    await withDb(env, (conn) => conn.query(
+      `INSERT INTO activity_logs (id, user_id, user_name, user_role, action, entity_type, entity_id, entity_label, description, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+      [
+        `log-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        user?.id || null,
+        user?.name || 'Unknown',
+        user?.role || 'unknown',
+        action,
+        entityType,
+        entityId || null,
+        entityLabel || null,
+        description
+      ]
+    ));
+  } catch (err) {
+    console.error('Failed to record activity log:', err);
+  }
+}
+
 // Confirms a Messenger webhook POST body was really sent by Facebook,
 // by recomputing the HMAC-SHA256 signature with the App Secret.
 async function verifyFacebookSignature(rawBody, signatureHeader, appSecret) {
@@ -565,6 +589,14 @@ export default {
         const secret = env.JWT_SECRET || 'nextgarage_super_secret_jwt_key_2026';
         const token = jwt.sign(payload, secret, { expiresIn: '7d' });
 
+        await logActivity(env, payload, {
+          action: 'login',
+          entityType: 'auth',
+          entityId: user.id,
+          entityLabel: user.name,
+          description: `${user.name} logged in`
+        });
+
         return jsonResponse({ token, user: payload }, 200, corsHeaders);
       } catch (err) {
         return jsonResponse({ error: err.message }, 500, corsHeaders);
@@ -627,6 +659,15 @@ export default {
           );
           return { id, name: name.trim(), username: username.trim().toLowerCase(), role, status: 'active' };
         });
+
+        await logActivity(env, user, {
+          action: 'create',
+          entityType: 'user',
+          entityId: created.id,
+          entityLabel: created.name,
+          description: `${user.name} created user ${created.name} (${created.role})`
+        });
+
         return jsonResponse(created, 201, corsHeaders);
       } catch (err) {
         return jsonResponse({ error: err.message }, 500, corsHeaders);
@@ -655,6 +696,15 @@ export default {
           return rows[0] || null;
         });
         if (!updated) return jsonResponse({ error: 'User not found' }, 404, corsHeaders);
+
+        await logActivity(env, user, {
+          action: 'update',
+          entityType: 'user',
+          entityId: id,
+          entityLabel: updated.name,
+          description: `${user.name} edited user ${updated.name}`
+        });
+
         return jsonResponse(updated, 200, corsHeaders);
       } catch (err) {
         return jsonResponse({ error: err.message }, 500, corsHeaders);
@@ -673,9 +723,20 @@ export default {
           return jsonResponse({ error: 'Password must be at least 4 characters long' }, 400, corsHeaders);
         }
         const hash = await bcrypt.hash(password, 10);
-        await withDb(env, async (conn) => {
+        const targetName = await withDb(env, async (conn) => {
           await conn.query('UPDATE users SET password_hash = ?, updated_at = NOW() WHERE id = ?', [hash, id]);
+          const [rows] = await conn.query('SELECT name FROM users WHERE id = ?', [id]);
+          return rows[0]?.name;
         });
+
+        await logActivity(env, user, {
+          action: 'reset_password',
+          entityType: 'user',
+          entityId: id,
+          entityLabel: targetName,
+          description: `${user.name} reset the password for user ${targetName || id}`
+        });
+
         return jsonResponse({ success: true, message: 'Password reset successfully' }, 200, corsHeaders);
       } catch (err) {
         return jsonResponse({ error: err.message }, 500, corsHeaders);
@@ -692,15 +753,51 @@ export default {
         if (user.id === id) {
           return jsonResponse({ error: 'You cannot delete your own account while logged in.' }, 400, corsHeaders);
         }
-        await withDb(env, async (conn) => {
+        const targetName = await withDb(env, async (conn) => {
           const [superAdmins] = await conn.query('SELECT COUNT(*) as count FROM users WHERE role = "super_admin" AND status = "active"');
-          const [target] = await conn.query('SELECT role FROM users WHERE id = ?', [id]);
+          const [target] = await conn.query('SELECT role, name FROM users WHERE id = ?', [id]);
           if (target.length > 0 && target[0].role === 'super_admin' && superAdmins[0].count <= 1) {
             throw new Error('Cannot delete the only remaining active Super Admin.');
           }
           await conn.query('DELETE FROM users WHERE id = ?', [id]);
+          return target[0]?.name;
         });
+
+        await logActivity(env, user, {
+          action: 'delete',
+          entityType: 'user',
+          entityId: id,
+          entityLabel: targetName,
+          description: `${user.name} deleted user ${targetName || id}`
+        });
+
         return jsonResponse({ success: true }, 200, corsHeaders);
+      } catch (err) {
+        return jsonResponse({ error: err.message }, 500, corsHeaders);
+      }
+    }
+
+    // ----------------------------------------------------
+    // ACTIVITY LOGS (Super Admin only)
+    // ----------------------------------------------------
+    if (path === '/api/activity-logs' && method === 'GET') {
+      const user = getUser(request, env);
+      if (!user || user.role !== 'super_admin') {
+        return jsonResponse({ error: 'Only a Super Admin can view the activity log.' }, 403, corsHeaders);
+      }
+      try {
+        const url = new URL(request.url);
+        const limit = Math.min(500, Math.max(1, parseInt(url.searchParams.get('limit')) || 200));
+        const rows = await withDb(env, (conn) => conn.query(
+          `SELECT id, user_id as userId, user_name as userName, user_role as userRole,
+                  action, entity_type as entityType, entity_id as entityId,
+                  entity_label as entityLabel, description, created_at as createdAt
+           FROM activity_logs
+           ORDER BY created_at DESC
+           LIMIT ?`,
+          [limit]
+        )).then(([r]) => r);
+        return jsonResponse(rows, 200, corsHeaders);
       } catch (err) {
         return jsonResponse({ error: err.message }, 500, corsHeaders);
       }
@@ -1092,6 +1189,7 @@ export default {
     }
 
     if (path === '/api/customers' && method === 'POST') {
+      const user = getUser(request, env);
       try {
         const body = await request.json();
         const created = await withTransaction(env, async (conn) => {
@@ -1127,6 +1225,15 @@ export default {
             createdAt: new Date().toISOString(),
           };
         });
+
+        await logActivity(env, user, {
+          action: 'create',
+          entityType: 'customer',
+          entityId: created.id,
+          entityLabel: created.name,
+          description: `${user?.name || 'Someone'} added customer ${created.name}`
+        });
+
         return jsonResponse(created, 201, corsHeaders);
       } catch (err) {
         return jsonResponse({ error: err.message }, 500, corsHeaders);
@@ -1134,6 +1241,7 @@ export default {
     }
 
     if (path.match(/^\/api\/customers\/[^/]+$/) && method === 'PUT') {
+      const user = getUser(request, env);
       try {
         const id = path.split('/')[3];
         const body = await request.json();
@@ -1154,6 +1262,15 @@ export default {
           }
           return { id, ...body };
         });
+
+        await logActivity(env, user, {
+          action: 'update',
+          entityType: 'customer',
+          entityId: id,
+          entityLabel: updated.name,
+          description: `${user?.name || 'Someone'} edited customer ${updated.name}`
+        });
+
         return jsonResponse(updated, 200, corsHeaders);
       } catch (err) {
         return jsonResponse({ error: err.message }, 500, corsHeaders);
@@ -1167,9 +1284,20 @@ export default {
       }
       try {
         const id = path.split('/')[3];
-        await withDb(env, async (conn) => {
+        const custName = await withDb(env, async (conn) => {
+          const [rows] = await conn.query('SELECT name FROM customers WHERE id = ?', [id]);
           await conn.query('DELETE FROM customers WHERE id = ?', [id]);
+          return rows[0]?.name;
         });
+
+        await logActivity(env, user, {
+          action: 'delete',
+          entityType: 'customer',
+          entityId: id,
+          entityLabel: custName,
+          description: `${user?.name || 'Someone'} deleted customer ${custName || id}`
+        });
+
         return jsonResponse({ success: true }, 200, corsHeaders);
       } catch (err) {
         return jsonResponse({ error: err.message }, 500, corsHeaders);
@@ -1586,6 +1714,7 @@ export default {
     }
 
     if (path === '/api/job-cards' && method === 'POST') {
+      const user = getUser(request, env);
       try {
         const data = await request.json();
         const jcId = `jc-${Date.now()}`;
@@ -1719,6 +1848,14 @@ export default {
           };
         });
 
+        await logActivity(env, user, {
+          action: 'create',
+          entityType: 'job_card',
+          entityId: jcId,
+          entityLabel: result.jobCardNumber,
+          description: `${user?.name || 'Someone'} created job card ${result.jobCardNumber}`
+        });
+
         return jsonResponse(result, 201, corsHeaders);
       } catch (err) {
         return jsonResponse({ error: err.message }, 500, corsHeaders);
@@ -1726,6 +1863,7 @@ export default {
     }
 
     if (path.match(/^\/api\/job-cards\/[^/]+$/) && method === 'PUT') {
+      const user = getUser(request, env);
       try {
         const id = path.split('/')[3];
         const data = await request.json();
@@ -1771,7 +1909,16 @@ export default {
             }
           }
 
-          return { ...data, id };
+          const [rows] = await conn.query('SELECT job_card_number FROM job_cards WHERE id = ?', [id]);
+          return { ...data, id, jobCardNumber: rows[0]?.job_card_number };
+        });
+
+        await logActivity(env, user, {
+          action: 'update',
+          entityType: 'job_card',
+          entityId: id,
+          entityLabel: result.jobCardNumber,
+          description: `${user?.name || 'Someone'} edited job card ${result.jobCardNumber || id}`
         });
 
         return jsonResponse(result, 200, corsHeaders);
@@ -1781,6 +1928,7 @@ export default {
     }
 
     if (path.match(/^\/api\/job-cards\/[^/]+\/status$/) && method === 'PATCH') {
+      const user = getUser(request, env);
       try {
         const id = path.split('/')[3];
         const { status } = await request.json();
@@ -1817,6 +1965,15 @@ export default {
           };
         });
         if (!card) return jsonResponse({ error: 'Job card not found' }, 404, corsHeaders);
+
+        await logActivity(env, user, {
+          action: 'status_change',
+          entityType: 'job_card',
+          entityId: id,
+          entityLabel: card.jobCardNumber,
+          description: `${user?.name || 'Someone'} changed job card ${card.jobCardNumber} status to ${card.status}`
+        });
+
         return jsonResponse(card, 200, corsHeaders);
       } catch (err) {
         return jsonResponse({ error: err.message }, 500, corsHeaders);
@@ -1830,9 +1987,20 @@ export default {
       }
       try {
         const id = path.split('/')[3];
-        await withDb(env, async (conn) => {
+        const jcNumber = await withDb(env, async (conn) => {
+          const [rows] = await conn.query('SELECT job_card_number FROM job_cards WHERE id = ?', [id]);
           await conn.query('DELETE FROM job_cards WHERE id = ?', [id]);
+          return rows[0]?.job_card_number;
         });
+
+        await logActivity(env, user, {
+          action: 'delete',
+          entityType: 'job_card',
+          entityId: id,
+          entityLabel: jcNumber,
+          description: `${user?.name || 'Someone'} deleted job card ${jcNumber || id}`
+        });
+
         return jsonResponse({ success: true }, 200, corsHeaders);
       } catch (err) {
         return jsonResponse({ error: err.message }, 500, corsHeaders);
@@ -1977,6 +2145,7 @@ export default {
     }
 
     if (path === '/api/invoices' && method === 'POST') {
+      const user = getUser(request, env);
       try {
         const body = await request.json();
         const created = await withTransaction(env, async (conn) => {
@@ -2099,6 +2268,15 @@ export default {
           const statusForFrontend = status === 'paid' ? 'Paid' : status === 'partial' ? 'Partial' : status === 'draft' ? 'Draft' : 'Due';
           return { id: invId, invoiceNumber, ...body, customerId, vehicleId, grandTotal, paid, due, status: statusForFrontend };
         });
+
+        await logActivity(env, user, {
+          action: created.status === 'Draft' ? 'create_draft' : 'create',
+          entityType: 'invoice',
+          entityId: created.id,
+          entityLabel: created.invoiceNumber,
+          description: `${user?.name || 'Someone'} created invoice ${created.invoiceNumber}${created.status === 'Draft' ? ' as Draft' : ''}`
+        });
+
         return jsonResponse(created, 201, corsHeaders);
       } catch (err) {
         return jsonResponse({ error: err.message }, 500, corsHeaders);
@@ -2243,6 +2421,15 @@ export default {
         });
 
         if (!updated) return jsonResponse({ error: 'Invoice not found' }, 404, corsHeaders);
+
+        await logActivity(env, user, {
+          action: 'update',
+          entityType: 'invoice',
+          entityId: updated.id,
+          entityLabel: updated.invoiceNumber,
+          description: `${user?.name || 'Someone'} edited invoice ${updated.invoiceNumber}${updated.status !== 'Draft' && body.status && body.status !== 'Draft' ? ' (finalized)' : ''}`
+        });
+
         return jsonResponse(updated, 200, corsHeaders);
       } catch (err) {
         return jsonResponse({ error: err.message }, 500, corsHeaders);
@@ -2250,6 +2437,7 @@ export default {
     }
 
     if (path.match(/^\/api\/invoices\/[^/]+\/payments$/) && method === 'POST') {
+      const user = getUser(request, env);
       try {
         const id = path.split('/')[3];
         const body = await request.json();
@@ -2293,6 +2481,15 @@ export default {
 
           return { ...inv, paid: newPaid, due: newDue, status: statusMapToFrontend[newStatus] || 'Paid' };
         });
+
+        await logActivity(env, user, {
+          action: 'payment',
+          entityType: 'invoice',
+          entityId: updated.id,
+          entityLabel: updated.invoice_number,
+          description: `${user?.name || 'Someone'} recorded a payment of ${paymentAmount} for invoice ${updated.invoice_number}`
+        });
+
         return jsonResponse(updated, 200, corsHeaders);
       } catch (err) {
         return jsonResponse({ error: err.message }, 500, corsHeaders);
@@ -2390,13 +2587,23 @@ export default {
       }
       try {
         const id = path.split('/')[3];
-        await withTransaction(env, async (conn) => {
+        const invoiceNumber = await withTransaction(env, async (conn) => {
           const [rows] = await conn.query('SELECT invoice_number FROM invoices WHERE id = ?', [id]);
           if (rows.length > 0) {
             await conn.query('DELETE FROM financial_transactions WHERE reference_type = "invoice_payment" AND reference_id = ?', [rows[0].invoice_number]);
           }
           await conn.query('DELETE FROM invoices WHERE id = ?', [id]);
+          return rows[0]?.invoice_number;
         });
+
+        await logActivity(env, user, {
+          action: 'delete',
+          entityType: 'invoice',
+          entityId: id,
+          entityLabel: invoiceNumber,
+          description: `${user?.name || 'Someone'} deleted invoice ${invoiceNumber || id}`
+        });
+
         return jsonResponse({ success: true }, 200, corsHeaders);
       } catch (err) {
         return jsonResponse({ error: err.message }, 500, corsHeaders);
@@ -2536,6 +2743,7 @@ export default {
     }
 
     if (path === '/api/quotations' && method === 'POST') {
+      const user = getUser(request, env);
       try {
         const data = await request.json();
         const qId = `qt-${Date.now()}`;
@@ -2678,6 +2886,14 @@ export default {
           };
         });
 
+        await logActivity(env, user, {
+          action: 'create',
+          entityType: 'quotation',
+          entityId: result.id,
+          entityLabel: result.quotationNumber,
+          description: `${user?.name || 'Someone'} created quotation ${result.quotationNumber}`
+        });
+
         return jsonResponse(result, 201, corsHeaders);
       } catch (err) {
         return jsonResponse({ error: err.message }, 500, corsHeaders);
@@ -2685,6 +2901,7 @@ export default {
     }
 
     if (path.match(/^\/api\/quotations\/[^/]+$/) && method === 'PUT') {
+      const user = getUser(request, env);
       try {
         const id = path.split('/')[3];
         const data = await request.json();
@@ -2737,7 +2954,16 @@ export default {
             await conn.query(`UPDATE quotations SET ${updates.join(', ')} WHERE id = ?`, params);
           }
 
-          return { ...data, id };
+          const [rows] = await conn.query('SELECT quotation_number FROM quotations WHERE id = ?', [id]);
+          return { ...data, id, quotationNumber: rows[0]?.quotation_number };
+        });
+
+        await logActivity(env, user, {
+          action: 'update',
+          entityType: 'quotation',
+          entityId: id,
+          entityLabel: updated.quotationNumber,
+          description: `${user?.name || 'Someone'} edited quotation ${updated.quotationNumber || id}`
         });
 
         return jsonResponse(updated, 200, corsHeaders);
@@ -2747,13 +2973,25 @@ export default {
     }
 
     if (path.match(/^\/api\/quotations\/[^/]+\/status$/) && method === 'PATCH') {
+      const user = getUser(request, env);
       try {
         const id = path.split('/')[3];
         const { status } = await request.json();
         const dbStatus = (status || 'draft').toLowerCase();
-        await withDb(env, async (conn) => {
+        const qNumber = await withDb(env, async (conn) => {
           await conn.query('UPDATE quotations SET status = ?, updated_at = NOW() WHERE id = ?', [dbStatus, id]);
+          const [rows] = await conn.query('SELECT quotation_number FROM quotations WHERE id = ?', [id]);
+          return rows[0]?.quotation_number;
         });
+
+        await logActivity(env, user, {
+          action: 'status_change',
+          entityType: 'quotation',
+          entityId: id,
+          entityLabel: qNumber,
+          description: `${user?.name || 'Someone'} changed quotation ${qNumber || id} status to ${status}`
+        });
+
         return jsonResponse({ success: true, id, status }, 200, corsHeaders);
       } catch (err) {
         return jsonResponse({ error: err.message }, 500, corsHeaders);
@@ -2761,6 +2999,7 @@ export default {
     }
 
     if (path.match(/^\/api\/quotations\/[^/]+\/convert$/) && method === 'POST') {
+      const user = getUser(request, env);
       try {
         const id = path.split('/')[3];
         const result = await withTransaction(env, async (conn) => {
@@ -2883,6 +3122,14 @@ export default {
           };
         });
 
+        await logActivity(env, user, {
+          action: 'convert',
+          entityType: 'quotation',
+          entityId: id,
+          entityLabel: result.quotationNumber,
+          description: `${user?.name || 'Someone'} converted quotation ${result.quotationNumber} to invoice ${result.invoiceNumber}`
+        });
+
         return jsonResponse(result, 200, corsHeaders);
       } catch (err) {
         return jsonResponse({ error: err.message }, 500, corsHeaders);
@@ -2896,10 +3143,21 @@ export default {
       }
       try {
         const id = path.split('/')[3];
-        await withTransaction(env, async (conn) => {
+        const qNumber = await withTransaction(env, async (conn) => {
+          const [rows] = await conn.query('SELECT quotation_number FROM quotations WHERE id = ?', [id]);
           await conn.query('DELETE FROM quotation_items WHERE quotation_id = ?', [id]);
           await conn.query('DELETE FROM quotations WHERE id = ?', [id]);
+          return rows[0]?.quotation_number;
         });
+
+        await logActivity(env, user, {
+          action: 'delete',
+          entityType: 'quotation',
+          entityId: id,
+          entityLabel: qNumber,
+          description: `${user?.name || 'Someone'} deleted quotation ${qNumber || id}`
+        });
+
         return jsonResponse({ success: true }, 200, corsHeaders);
       } catch (err) {
         return jsonResponse({ error: err.message }, 500, corsHeaders);

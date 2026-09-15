@@ -1,6 +1,7 @@
 import express from 'express';
 import pool, { withTransaction } from '../db.js';
 import { optionalAuth } from '../middleware/auth.js';
+import { logActivity } from '../utils/activityLog.js';
 
 const router = express.Router();
 
@@ -223,7 +224,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // CREATE Invoice
-router.post('/', async (req, res) => {
+router.post('/', optionalAuth, async (req, res) => {
   try {
     const data = req.body;
     const invId = `inv-${Date.now()}`;
@@ -413,6 +414,15 @@ router.post('/', async (req, res) => {
       };
     });
 
+    await logActivity(null, {
+      user: req.user,
+      action: result.status === 'Draft' ? 'create_draft' : 'create',
+      entityType: 'invoice',
+      entityId: result.id,
+      entityLabel: result.invoiceNumber,
+      description: `${req.user?.name || 'Someone'} created invoice ${result.invoiceNumber}${result.status === 'Draft' ? ' as Draft' : ''}`
+    });
+
     res.status(201).json(result);
   } catch (error) {
     console.error('Error creating invoice:', error);
@@ -578,6 +588,16 @@ router.put('/:id', optionalAuth, async (req, res) => {
     });
 
     if (!updated) return res.status(404).json({ error: 'Invoice not found' });
+
+    await logActivity(null, {
+      user: req.user,
+      action: 'update',
+      entityType: 'invoice',
+      entityId: updated.id,
+      entityLabel: updated.invoiceNumber,
+      description: `${req.user?.name || 'Someone'} edited invoice ${updated.invoiceNumber}${updated.status !== 'Draft' && data.status && data.status !== 'Draft' ? ' (finalized)' : ''}`
+    });
+
     res.json(updated);
   } catch (error) {
     console.error('Error updating invoice:', error);
@@ -586,7 +606,7 @@ router.put('/:id', optionalAuth, async (req, res) => {
 });
 
 // RECORD PAYMENT FOR INVOICE
-router.post('/:id/payments', async (req, res) => {
+router.post('/:id/payments', optionalAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const { amount, paymentMethod = 'Cash', note, date } = req.body;
@@ -683,6 +703,15 @@ router.post('/:id/payments', async (req, res) => {
         })),
         createdAt: typeof inv.created_at === 'string' ? inv.created_at : new Date(inv.created_at).toISOString()
       };
+    });
+
+    await logActivity(null, {
+      user: req.user,
+      action: 'payment',
+      entityType: 'invoice',
+      entityId: updatedInvoice.id,
+      entityLabel: updatedInvoice.invoiceNumber,
+      description: `${req.user?.name || 'Someone'} recorded a payment of ${paymentAmount} for invoice ${updatedInvoice.invoiceNumber}`
     });
 
     res.json(updatedInvoice);
@@ -794,7 +823,18 @@ router.delete('/:id', optionalAuth, async (req, res) => {
       return res.status(403).json({ error: 'Staff users are not permitted to delete invoices.' });
     }
     const { id } = req.params;
+    const [rows] = await pool.query('SELECT invoice_number FROM invoices WHERE id = ?', [id]);
     await pool.query('DELETE FROM invoices WHERE id = ?', [id]);
+
+    await logActivity(null, {
+      user: req.user,
+      action: 'delete',
+      entityType: 'invoice',
+      entityId: id,
+      entityLabel: rows[0]?.invoice_number,
+      description: `${req.user?.name || 'Someone'} deleted invoice ${rows[0]?.invoice_number || id}`
+    });
+
     res.json({ success: true });
   } catch (error) {
     console.error('Error deleting invoice:', error);
