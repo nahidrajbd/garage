@@ -8,6 +8,7 @@ const SELECT_COLUMNS = `id, name, specialty, phone, email, facebook_link as face
   nid_or_birth_cert as nidOrBirthCert, identification_mark as identificationMark, reference,
   present_address as presentAddress, permanent_address as permanentAddress,
   emergency_contact_name as emergencyContactName, emergency_contact_phone as emergencyContactPhone,
+  DATE_FORMAT(joining_date, '%Y-%m-%d') as joiningDate,
   status, created_at`;
 
 // GET all active technicians
@@ -36,8 +37,8 @@ router.post('/', async (req, res) => {
       `INSERT INTO technicians (
         id, name, specialty, phone, email, facebook_link, photo, blood_group,
         nid_or_birth_cert, identification_mark, reference, present_address, permanent_address,
-        emergency_contact_name, emergency_contact_phone, status, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "active", NOW())`,
+        emergency_contact_name, emergency_contact_phone, joining_date, status, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "active", NOW())`,
       [
         id,
         data.name.trim(),
@@ -54,6 +55,7 @@ router.post('/', async (req, res) => {
         data.permanentAddress?.trim() || null,
         data.emergencyContactName?.trim() || null,
         data.emergencyContactPhone?.trim() || null,
+        data.joiningDate || null,
       ]
     );
 
@@ -77,7 +79,7 @@ router.put('/:id', async (req, res) => {
       `UPDATE technicians SET
         name = ?, specialty = ?, phone = ?, email = ?, facebook_link = ?, photo = ?, blood_group = ?,
         nid_or_birth_cert = ?, identification_mark = ?, reference = ?, present_address = ?, permanent_address = ?,
-        emergency_contact_name = ?, emergency_contact_phone = ?, updated_at = NOW()
+        emergency_contact_name = ?, emergency_contact_phone = ?, joining_date = ?, updated_at = NOW()
        WHERE id = ?`,
       [
         data.name.trim(),
@@ -94,6 +96,7 @@ router.put('/:id', async (req, res) => {
         data.permanentAddress?.trim() || null,
         data.emergencyContactName?.trim() || null,
         data.emergencyContactPhone?.trim() || null,
+        data.joiningDate || null,
         id,
       ]
     );

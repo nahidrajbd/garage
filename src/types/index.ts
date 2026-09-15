@@ -31,6 +31,7 @@ export interface Technician {
   permanentAddress?: string;
   emergencyContactName?: string;
   emergencyContactPhone?: string;
+  joiningDate?: string;
   status: 'active' | 'inactive';
   createdAt?: string;
 }

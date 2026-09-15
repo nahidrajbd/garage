@@ -1041,7 +1041,8 @@ export default {
           const [rows] = await conn.query(
             `SELECT id, name, specialty, phone, email, facebook_link, photo, blood_group,
                     nid_or_birth_cert, identification_mark, reference, present_address, permanent_address,
-                    emergency_contact_name, emergency_contact_phone, status, created_at
+                    emergency_contact_name, emergency_contact_phone, DATE_FORMAT(joining_date, '%Y-%m-%d') as joining_date,
+                    status, created_at
              FROM technicians WHERE status = "active" ORDER BY name ASC`
           );
           return rows.map(r => ({
@@ -1060,6 +1061,7 @@ export default {
             permanentAddress: r.permanent_address || '',
             emergencyContactName: r.emergency_contact_name || '',
             emergencyContactPhone: r.emergency_contact_phone || '',
+            joiningDate: r.joining_date || '',
             status: r.status,
             createdAt: r.created_at,
           }));
@@ -1080,8 +1082,8 @@ export default {
             `INSERT INTO technicians (
               id, name, specialty, phone, email, facebook_link, photo, blood_group,
               nid_or_birth_cert, identification_mark, reference, present_address, permanent_address,
-              emergency_contact_name, emergency_contact_phone, status, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "active", NOW())`,
+              emergency_contact_name, emergency_contact_phone, joining_date, status, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "active", NOW())`,
             [
               id,
               data.name.trim(),
@@ -1098,6 +1100,7 @@ export default {
               data.permanentAddress?.trim() || null,
               data.emergencyContactName?.trim() || null,
               data.emergencyContactPhone?.trim() || null,
+              data.joiningDate || null,
             ]
           );
           return { ...data, id, status: 'active' };
@@ -1118,7 +1121,7 @@ export default {
             `UPDATE technicians SET
               name = ?, specialty = ?, phone = ?, email = ?, facebook_link = ?, photo = ?, blood_group = ?,
               nid_or_birth_cert = ?, identification_mark = ?, reference = ?, present_address = ?, permanent_address = ?,
-              emergency_contact_name = ?, emergency_contact_phone = ?, updated_at = NOW()
+              emergency_contact_name = ?, emergency_contact_phone = ?, joining_date = ?, updated_at = NOW()
              WHERE id = ?`,
             [
               data.name.trim(),
@@ -1135,6 +1138,7 @@ export default {
               data.permanentAddress?.trim() || null,
               data.emergencyContactName?.trim() || null,
               data.emergencyContactPhone?.trim() || null,
+              data.joiningDate || null,
               id,
             ]
           );

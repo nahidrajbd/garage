@@ -435,6 +435,7 @@ async function migrate() {
       ['permanent_address', 'TEXT NULL'],
       ['emergency_contact_name', 'VARCHAR(191) NULL'],
       ['emergency_contact_phone', 'VARCHAR(64) NULL'],
+      ['joining_date', 'DATE NULL'],
     ];
     for (const [col, def] of techNewColumns) {
       if (!techColNames.includes(col)) {

@@ -383,6 +383,7 @@ CREATE TABLE IF NOT EXISTS technicians (
   permanent_address TEXT NULL,
   emergency_contact_name VARCHAR(191) NULL,
   emergency_contact_phone VARCHAR(64) NULL,
+  joining_date DATE NULL,
   status ENUM('active', 'inactive') NOT NULL DEFAULT 'active',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
