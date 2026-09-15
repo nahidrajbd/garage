@@ -21,7 +21,8 @@ import {
   LogOut,
   ShieldCheck,
   UserCheck,
-  History
+  History,
+  UserCog
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -52,6 +53,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onNavClick }) => {
     { label: 'Transactions', path: '/transactions', icon: Receipt },
     { label: 'Reports', path: '/reports', icon: BarChart3 },
     { label: 'Loans', path: '/loans', icon: Landmark },
+    { label: 'Employee Management', path: '/employees', icon: UserCog },
     ...(isSuperAdmin ? [{ label: 'Activity Log', path: '/activity-log', icon: History }] : []),
     { label: 'Settings', path: '/settings', icon: SettingsIcon },
   ];

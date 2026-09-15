@@ -1,50 +1,27 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Settings as SettingsIcon, 
-  Save, 
-  Plus, 
-  Trash2, 
-  RotateCcw, 
-  Building2, 
-  FileText, 
-  Wrench, 
+import {
+  Settings as SettingsIcon,
+  Save,
+  Plus,
+  Trash2,
+  RotateCcw,
+  Building2,
+  FileText,
+  Wrench,
   Tag,
   Users,
   ShieldCheck,
   UserCheck,
   Key,
   Lock,
-  UserPlus,
-  UserCog,
-  Phone,
-  Edit2,
-  Check
+  UserPlus
 } from 'lucide-react';
 import { ConfirmDialog } from '../components/common/ConfirmDialog';
-import { Modal } from '../components/common/Modal';
 import { useApp } from '../context/AppContext';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
-import { Settings, ServiceItem, User, UserRole, Technician } from '../types';
+import { Settings, ServiceItem, User, UserRole } from '../types';
 import { formatBDT } from '../utils/formatters';
-
-interface TechnicianFormState {
-  name: string;
-  specialty: string;
-  phone: string;
-  email: string;
-  facebookLink: string;
-  photo: string;
-  bloodGroup: string;
-  nidOrBirthCert: string;
-  identificationMark: string;
-  reference: string;
-  presentAddress: string;
-  permanentAddress: string;
-  emergencyContactName: string;
-  emergencyContactPhone: string;
-  joiningDate: string;
-}
 
 export const SettingsPage: React.FC = () => {
   const { showToast, triggerRefresh } = useApp();
@@ -54,7 +31,6 @@ export const SettingsPage: React.FC = () => {
   const [services, setServices] = useState<ServiceItem[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [usersList, setUsersList] = useState<User[]>([]);
-  const [technicians, setTechnicians] = useState<Technician[]>([]);
   const [loading, setLoading] = useState(true);
 
   // New Service state
@@ -64,19 +40,6 @@ export const SettingsPage: React.FC = () => {
 
   // New Category state
   const [newCategoryName, setNewCategoryName] = useState('');
-
-  // Technicians state
-  const emptyTechForm: TechnicianFormState = {
-    name: '', specialty: '', phone: '', email: '', facebookLink: '', photo: '',
-    bloodGroup: '', nidOrBirthCert: '', identificationMark: '', reference: '',
-    presentAddress: '', permanentAddress: '', emergencyContactName: '', emergencyContactPhone: '', joiningDate: ''
-  };
-  const [isTechModalOpen, setIsTechModalOpen] = useState(false);
-  const [editingTechId, setEditingTechId] = useState<string | null>(null);
-  const [techForm, setTechForm] = useState<TechnicianFormState>(emptyTechForm);
-  const updateTechForm = (field: keyof TechnicianFormState, value: string) => {
-    setTechForm(prev => ({ ...prev, [field]: value }));
-  };
 
   // New User state (Super Admin only)
   const [newUserName, setNewUserName] = useState('');
@@ -97,17 +60,15 @@ export const SettingsPage: React.FC = () => {
     const loadSettings = async () => {
       setLoading(true);
       try {
-        const promises: [Promise<Settings>, Promise<ServiceItem[]>, Promise<string[]>, Promise<Technician[]>] = [
+        const promises: [Promise<Settings>, Promise<ServiceItem[]>, Promise<string[]>] = [
           api.getSettings(),
           api.getServices(),
-          api.getExpenseCategories(),
-          api.getTechnicians()
+          api.getExpenseCategories()
         ];
-        const [sett, srvs, cats, techs] = await Promise.all(promises);
+        const [sett, srvs, cats] = await Promise.all(promises);
         setSettings(sett);
         setServices(srvs);
         setCategories(cats);
-        setTechnicians(techs);
 
         if (canManageUsers) {
           try {
@@ -125,105 +86,6 @@ export const SettingsPage: React.FC = () => {
     };
     loadSettings();
   }, [canManageUsers]);
-
-  // Technician Handlers
-  const handleOpenAddTech = () => {
-    setEditingTechId(null);
-    setTechForm(emptyTechForm);
-    setIsTechModalOpen(true);
-  };
-
-  const handleStartEditTech = (tech: Technician) => {
-    setEditingTechId(tech.id);
-    setTechForm({
-      name: tech.name || '',
-      specialty: tech.specialty || '',
-      phone: tech.phone || '',
-      email: tech.email || '',
-      facebookLink: tech.facebookLink || '',
-      photo: tech.photo || '',
-      bloodGroup: tech.bloodGroup || '',
-      nidOrBirthCert: tech.nidOrBirthCert || '',
-      identificationMark: tech.identificationMark || '',
-      reference: tech.reference || '',
-      presentAddress: tech.presentAddress || '',
-      permanentAddress: tech.permanentAddress || '',
-      emergencyContactName: tech.emergencyContactName || '',
-      emergencyContactPhone: tech.emergencyContactPhone || '',
-      joiningDate: tech.joiningDate || ''
-    });
-    setIsTechModalOpen(true);
-  };
-
-  const handleTechPhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (uploadEvent) => {
-      const dataUrl = uploadEvent.target?.result as string;
-      if (!dataUrl) return;
-      // Phone camera photos can be several MB, which is too large to send in a
-      // single JSON request reliably - downscale to a small square thumbnail first.
-      const img = new Image();
-      img.onload = () => {
-        const size = 320;
-        const canvas = document.createElement('canvas');
-        canvas.width = size;
-        canvas.height = size;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) {
-          updateTechForm('photo', dataUrl);
-          return;
-        }
-        const scale = Math.max(size / img.width, size / img.height);
-        const dw = img.width * scale;
-        const dh = img.height * scale;
-        ctx.drawImage(img, (size - dw) / 2, (size - dh) / 2, dw, dh);
-        updateTechForm('photo', canvas.toDataURL('image/jpeg', 0.85));
-      };
-      img.src = dataUrl;
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const handleSaveTechnician = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!techForm.name.trim()) return;
-    try {
-      if (editingTechId) {
-        const updated = await api.updateTechnician(editingTechId, techForm);
-        setTechnicians(prev => prev.map(t => t.id === updated.id ? updated : t));
-        showToast(`Technician "${updated.name}" updated successfully!`, 'success');
-      } else {
-        const created = await api.createTechnician(techForm);
-        setTechnicians(prev => [...prev, created]);
-        showToast(`Technician "${created.name}" added successfully!`, 'success');
-      }
-      setIsTechModalOpen(false);
-      setEditingTechId(null);
-      setTechForm(emptyTechForm);
-      triggerRefresh();
-    } catch (err: any) {
-      console.error(err);
-      showToast(err.message || 'Failed to save technician', 'error');
-    }
-  };
-
-  const handleDeleteTechnician = async (id: string, name: string) => {
-    if (!canDelete) {
-      showToast('Staff users are not permitted to delete technicians.', 'error');
-      return;
-    }
-    try {
-      await api.deleteTechnician(id);
-      setTechnicians(prev => prev.filter(t => t.id !== id));
-      showToast(`Technician "${name}" removed`, 'info');
-      triggerRefresh();
-    } catch (err: any) {
-      console.error(err);
-      showToast(err.message || 'Failed to delete technician', 'error');
-    }
-  };
 
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -795,106 +657,6 @@ export const SettingsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* 4. Workshop Technicians & Staff Management */}
-      <div className="bg-white p-5 sm:p-6 rounded-2xl border border-gray-200/80 shadow-2xs space-y-5">
-        <div className="flex items-center justify-between pb-3 border-b border-gray-100">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-red-50 text-red-600 flex items-center justify-center">
-              <UserCog className="w-4 h-4" />
-            </div>
-            <div>
-              <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider font-heading">
-                Workshop Technicians & Specialists
-              </h3>
-              <p className="text-xs text-gray-500">
-                Add, rename, and manage technicians available for Job Card assignment.
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-mono font-semibold text-gray-500 bg-gray-100 px-2.5 py-1 rounded-lg">
-              {technicians.length} Technicians
-            </span>
-            <button
-              type="button"
-              onClick={handleOpenAddTech}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-[#C1121F] hover:bg-[#A30F1A] rounded-xl transition-all shadow-xs cursor-pointer font-heading uppercase tracking-wider"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Add Technician</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Technicians List Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {technicians.map(tech => (
-            <div
-              key={tech.id}
-              className="p-4 rounded-xl border border-gray-200 bg-white hover:border-gray-300 hover:shadow-xs transition-all flex flex-col justify-between gap-3"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-start gap-3">
-                  {tech.photo ? (
-                    <img src={tech.photo} alt={tech.name} className="w-12 h-12 rounded-full object-cover border border-gray-200 shrink-0" />
-                  ) : (
-                    <div className="w-12 h-12 rounded-full bg-gray-100 text-gray-400 flex items-center justify-center shrink-0 font-bold font-heading">
-                      {tech.name.charAt(0).toUpperCase()}
-                    </div>
-                  )}
-                  <div>
-                    <h4 className="text-sm font-bold text-gray-900 font-heading">{tech.name}</h4>
-                    {tech.specialty && (
-                      <span className="inline-block mt-1 px-2 py-0.5 bg-red-50 text-red-700 text-[11px] font-medium rounded-md border border-red-100">
-                        {tech.specialty}
-                      </span>
-                    )}
-                    {tech.phone && (
-                      <div className="flex items-center gap-1.5 text-xs text-gray-500 mt-2 font-mono">
-                        <Phone className="w-3 h-3 text-gray-400" />
-                        <span>{tech.phone}</span>
-                      </div>
-                    )}
-                    {tech.bloodGroup && (
-                      <div className="mt-1 text-[11px] text-gray-500">
-                        Blood Group: <span className="font-semibold text-gray-700">{tech.bloodGroup}</span>
-                      </div>
-                    )}
-                    {tech.joiningDate && (
-                      <div className="mt-0.5 text-[11px] text-gray-500">
-                        Joined: <span className="font-semibold text-gray-700">{tech.joiningDate}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => handleStartEditTech(tech)}
-                    title="Edit Full Profile"
-                    className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
-                  >
-                    <Edit2 className="w-3.5 h-3.5" />
-                  </button>
-
-                  {canDelete && (
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteTechnician(tech.id, tech.name)}
-                      title="Delete Technician"
-                      className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
       {/* 5. Expense Categories Management */}
       <div className="bg-white p-5 rounded-2xl border border-gray-200/80 shadow-2xs space-y-4">
         <div className="flex items-center justify-between pb-3 border-b border-gray-100">
@@ -947,215 +709,6 @@ export const SettingsPage: React.FC = () => {
           ))}
         </div>
       </div>
-
-      {/* Technician Full Profile Modal (Add / Edit) */}
-      <Modal
-        isOpen={isTechModalOpen}
-        onClose={() => setIsTechModalOpen(false)}
-        title={editingTechId ? 'Edit Technician Profile' : 'Add New Technician'}
-        subtitle="Full employee record for workshop staff."
-        maxWidth="2xl"
-      >
-        <form onSubmit={handleSaveTechnician} className="space-y-5">
-          {/* Photo + Basic Info */}
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="flex flex-col items-center gap-2 shrink-0">
-              {techForm.photo ? (
-                <img src={techForm.photo} alt="Technician" className="w-24 h-24 rounded-xl object-cover border border-gray-200" />
-              ) : (
-                <div className="w-24 h-24 rounded-xl bg-gray-100 text-gray-400 flex items-center justify-center border border-gray-200">
-                  <UserCog className="w-8 h-8" />
-                </div>
-              )}
-              <label className="cursor-pointer text-[11px] font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 px-2.5 py-1 rounded-lg transition-colors">
-                Upload Photo
-                <input type="file" accept="image/*" onChange={handleTechPhotoUpload} className="hidden" />
-              </label>
-            </div>
-
-            <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="sm:col-span-2">
-                <label className="block text-[11px] font-semibold text-gray-700 mb-1">Full Name *</label>
-                <input
-                  type="text" required value={techForm.name}
-                  onChange={e => updateTechForm('name', e.target.value)}
-                  placeholder="e.g. Karim Uddin"
-                  className="w-full text-xs px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] font-semibold text-gray-700 mb-1">Specialty / Department</label>
-                <input
-                  type="text" value={techForm.specialty}
-                  onChange={e => updateTechForm('specialty', e.target.value)}
-                  placeholder="e.g. Engine & Mechanical"
-                  className="w-full text-xs px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] font-semibold text-gray-700 mb-1">Blood Group</label>
-                <input
-                  type="text" value={techForm.bloodGroup}
-                  onChange={e => updateTechForm('bloodGroup', e.target.value)}
-                  placeholder="e.g. O+"
-                  className="w-full text-xs px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] font-semibold text-gray-700 mb-1">Joining Date</label>
-                <input
-                  type="date" value={techForm.joiningDate}
-                  onChange={e => updateTechForm('joiningDate', e.target.value)}
-                  className="w-full text-xs px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:outline-none"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Contact Information */}
-          <div>
-            <p className="text-[11px] font-bold text-gray-800 uppercase tracking-wider font-heading mb-2 pb-1 border-b border-gray-100">
-              Contact Information
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[11px] font-semibold text-gray-700 mb-1">Phone Number</label>
-                <input
-                  type="text" value={techForm.phone}
-                  onChange={e => updateTechForm('phone', e.target.value)}
-                  placeholder="e.g. 01712-345678"
-                  className="w-full text-xs px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:outline-none font-mono"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] font-semibold text-gray-700 mb-1">Email</label>
-                <input
-                  type="email" value={techForm.email}
-                  onChange={e => updateTechForm('email', e.target.value)}
-                  placeholder="name@example.com"
-                  className="w-full text-xs px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:outline-none"
-                />
-              </div>
-              <div className="sm:col-span-2">
-                <label className="block text-[11px] font-semibold text-gray-700 mb-1">Facebook Profile Link</label>
-                <input
-                  type="text" value={techForm.facebookLink}
-                  onChange={e => updateTechForm('facebookLink', e.target.value)}
-                  placeholder="https://facebook.com/..."
-                  className="w-full text-xs px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:outline-none"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Emergency Contact */}
-          <div>
-            <p className="text-[11px] font-bold text-gray-800 uppercase tracking-wider font-heading mb-2 pb-1 border-b border-gray-100">
-              Emergency Contact
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[11px] font-semibold text-gray-700 mb-1">Contact Name</label>
-                <input
-                  type="text" value={techForm.emergencyContactName}
-                  onChange={e => updateTechForm('emergencyContactName', e.target.value)}
-                  placeholder="e.g. Father / Brother / Spouse name"
-                  className="w-full text-xs px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] font-semibold text-gray-700 mb-1">Contact Phone</label>
-                <input
-                  type="text" value={techForm.emergencyContactPhone}
-                  onChange={e => updateTechForm('emergencyContactPhone', e.target.value)}
-                  placeholder="e.g. 01812-345678"
-                  className="w-full text-xs px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:outline-none font-mono"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Identification */}
-          <div>
-            <p className="text-[11px] font-bold text-gray-800 uppercase tracking-wider font-heading mb-2 pb-1 border-b border-gray-100">
-              Identification
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[11px] font-semibold text-gray-700 mb-1">NID / Birth Certificate No.</label>
-                <input
-                  type="text" value={techForm.nidOrBirthCert}
-                  onChange={e => updateTechForm('nidOrBirthCert', e.target.value)}
-                  placeholder="e.g. 1234567890"
-                  className="w-full text-xs px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:outline-none font-mono"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] font-semibold text-gray-700 mb-1">Identification Mark on Body</label>
-                <input
-                  type="text" value={techForm.identificationMark}
-                  onChange={e => updateTechForm('identificationMark', e.target.value)}
-                  placeholder="e.g. Scar on left hand"
-                  className="w-full text-xs px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:outline-none"
-                />
-              </div>
-              <div className="sm:col-span-2">
-                <label className="block text-[11px] font-semibold text-gray-700 mb-1">Reference</label>
-                <input
-                  type="text" value={techForm.reference}
-                  onChange={e => updateTechForm('reference', e.target.value)}
-                  placeholder="Someone who referred / vouched for this employee"
-                  className="w-full text-xs px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:outline-none"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Addresses */}
-          <div>
-            <p className="text-[11px] font-bold text-gray-800 uppercase tracking-wider font-heading mb-2 pb-1 border-b border-gray-100">
-              Address
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[11px] font-semibold text-gray-700 mb-1">Present Address</label>
-                <textarea
-                  rows={2} value={techForm.presentAddress}
-                  onChange={e => updateTechForm('presentAddress', e.target.value)}
-                  placeholder="Current residence address"
-                  className="w-full text-xs px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-[11px] font-semibold text-gray-700 mb-1">Permanent Address</label>
-                <textarea
-                  rows={2} value={techForm.permanentAddress}
-                  onChange={e => updateTechForm('permanentAddress', e.target.value)}
-                  placeholder="Permanent / village address"
-                  className="w-full text-xs px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:outline-none"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
-            <button
-              type="button"
-              onClick={() => setIsTechModalOpen(false)}
-              className="px-3.5 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 rounded-xl cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-[#C1121F] hover:bg-[#A30F1A] rounded-xl cursor-pointer font-heading uppercase tracking-wider shadow-xs"
-            >
-              <Check className="w-3.5 h-3.5" />
-              <span>{editingTechId ? 'Save Changes' : 'Add Technician'}</span>
-            </button>
-          </div>
-        </form>
-      </Modal>
 
       {/* Password Reset Dialog */}
       {selectedUserForReset && (
