@@ -4,11 +4,17 @@ import { optionalAuth } from '../middleware/auth.js';
 
 const router = express.Router();
 
+const SELECT_COLUMNS = `id, name, specialty, phone, email, facebook_link as facebookLink, photo, blood_group as bloodGroup,
+  nid_or_birth_cert as nidOrBirthCert, identification_mark as identificationMark, reference,
+  present_address as presentAddress, permanent_address as permanentAddress,
+  emergency_contact_name as emergencyContactName, emergency_contact_phone as emergencyContactPhone,
+  status, created_at`;
+
 // GET all active technicians
 router.get('/', async (req, res) => {
   try {
     const [rows] = await pool.query(
-      'SELECT id, name, specialty, phone, status, created_at FROM technicians WHERE status = "active" ORDER BY name ASC'
+      `SELECT ${SELECT_COLUMNS} FROM technicians WHERE status = "active" ORDER BY name ASC`
     );
     res.json(rows);
   } catch (error) {
@@ -20,24 +26,38 @@ router.get('/', async (req, res) => {
 // CREATE a technician
 router.post('/', async (req, res) => {
   try {
-    const { name, specialty, phone } = req.body;
-    if (!name || !name.trim()) {
+    const data = req.body;
+    if (!data.name || !data.name.trim()) {
       return res.status(400).json({ error: 'Technician name is required' });
     }
 
     const id = `tech-${Date.now()}`;
     await pool.query(
-      'INSERT INTO technicians (id, name, specialty, phone, status, created_at) VALUES (?, ?, ?, ?, "active", NOW())',
-      [id, name.trim(), specialty?.trim() || null, phone?.trim() || null]
+      `INSERT INTO technicians (
+        id, name, specialty, phone, email, facebook_link, photo, blood_group,
+        nid_or_birth_cert, identification_mark, reference, present_address, permanent_address,
+        emergency_contact_name, emergency_contact_phone, status, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "active", NOW())`,
+      [
+        id,
+        data.name.trim(),
+        data.specialty?.trim() || null,
+        data.phone?.trim() || null,
+        data.email?.trim() || null,
+        data.facebookLink?.trim() || null,
+        data.photo || null,
+        data.bloodGroup?.trim() || null,
+        data.nidOrBirthCert?.trim() || null,
+        data.identificationMark?.trim() || null,
+        data.reference?.trim() || null,
+        data.presentAddress?.trim() || null,
+        data.permanentAddress?.trim() || null,
+        data.emergencyContactName?.trim() || null,
+        data.emergencyContactPhone?.trim() || null,
+      ]
     );
 
-    res.status(201).json({
-      id,
-      name: name.trim(),
-      specialty: specialty?.trim() || '',
-      phone: phone?.trim() || '',
-      status: 'active',
-    });
+    res.status(201).json({ ...data, id, status: 'active' });
   } catch (error) {
     console.error('Error creating technician:', error);
     res.status(500).json({ error: error.message });
@@ -48,23 +68,37 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, specialty, phone } = req.body;
-    if (!name || !name.trim()) {
+    const data = req.body;
+    if (!data.name || !data.name.trim()) {
       return res.status(400).json({ error: 'Technician name is required' });
     }
 
     await pool.query(
-      'UPDATE technicians SET name = ?, specialty = ?, phone = ?, updated_at = NOW() WHERE id = ?',
-      [name.trim(), specialty?.trim() || null, phone?.trim() || null, id]
+      `UPDATE technicians SET
+        name = ?, specialty = ?, phone = ?, email = ?, facebook_link = ?, photo = ?, blood_group = ?,
+        nid_or_birth_cert = ?, identification_mark = ?, reference = ?, present_address = ?, permanent_address = ?,
+        emergency_contact_name = ?, emergency_contact_phone = ?, updated_at = NOW()
+       WHERE id = ?`,
+      [
+        data.name.trim(),
+        data.specialty?.trim() || null,
+        data.phone?.trim() || null,
+        data.email?.trim() || null,
+        data.facebookLink?.trim() || null,
+        data.photo || null,
+        data.bloodGroup?.trim() || null,
+        data.nidOrBirthCert?.trim() || null,
+        data.identificationMark?.trim() || null,
+        data.reference?.trim() || null,
+        data.presentAddress?.trim() || null,
+        data.permanentAddress?.trim() || null,
+        data.emergencyContactName?.trim() || null,
+        data.emergencyContactPhone?.trim() || null,
+        id,
+      ]
     );
 
-    res.json({
-      id,
-      name: name.trim(),
-      specialty: specialty?.trim() || '',
-      phone: phone?.trim() || '',
-      status: 'active',
-    });
+    res.json({ ...data, id, status: 'active' });
   } catch (error) {
     console.error('Error updating technician:', error);
     res.status(500).json({ error: error.message });

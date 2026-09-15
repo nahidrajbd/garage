@@ -417,6 +417,32 @@ async function migrate() {
       console.log('✅ Added job_cards.damage_markers column.');
     }
 
+    // Expand technician records into full employee profiles
+    const [techCols] = await connection.query(`
+      SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'technicians'
+    `);
+    const techColNames = techCols.map(c => c.COLUMN_NAME);
+    const techNewColumns = [
+      ['email', 'VARCHAR(191) NULL'],
+      ['facebook_link', 'VARCHAR(255) NULL'],
+      ['photo', 'LONGTEXT NULL'],
+      ['blood_group', 'VARCHAR(10) NULL'],
+      ['nid_or_birth_cert', 'VARCHAR(100) NULL'],
+      ['identification_mark', 'VARCHAR(255) NULL'],
+      ['reference', 'VARCHAR(255) NULL'],
+      ['present_address', 'TEXT NULL'],
+      ['permanent_address', 'TEXT NULL'],
+      ['emergency_contact_name', 'VARCHAR(191) NULL'],
+      ['emergency_contact_phone', 'VARCHAR(64) NULL'],
+    ];
+    for (const [col, def] of techNewColumns) {
+      if (!techColNames.includes(col)) {
+        await connection.query(`ALTER TABLE technicians ADD COLUMN ${col} ${def}`);
+        console.log(`✅ Added technicians.${col} column.`);
+      }
+    }
+
     console.log('🎉 Migration and initial seeding completed successfully!');
   } catch (error) {
     console.error('❌ Migration error:', error.message);

@@ -20,6 +20,17 @@ export interface Technician {
   name: string;
   specialty?: string;
   phone?: string;
+  email?: string;
+  facebookLink?: string;
+  photo?: string;
+  bloodGroup?: string;
+  nidOrBirthCert?: string;
+  identificationMark?: string;
+  reference?: string;
+  presentAddress?: string;
+  permanentAddress?: string;
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
   status: 'active' | 'inactive';
   createdAt?: string;
 }

@@ -1039,13 +1039,27 @@ export default {
       try {
         const technicians = await withDb(env, async (conn) => {
           const [rows] = await conn.query(
-            'SELECT id, name, specialty, phone, status, created_at FROM technicians WHERE status = "active" ORDER BY name ASC'
+            `SELECT id, name, specialty, phone, email, facebook_link, photo, blood_group,
+                    nid_or_birth_cert, identification_mark, reference, present_address, permanent_address,
+                    emergency_contact_name, emergency_contact_phone, status, created_at
+             FROM technicians WHERE status = "active" ORDER BY name ASC`
           );
           return rows.map(r => ({
             id: r.id,
             name: r.name,
             specialty: r.specialty || '',
             phone: r.phone || '',
+            email: r.email || '',
+            facebookLink: r.facebook_link || '',
+            photo: r.photo || '',
+            bloodGroup: r.blood_group || '',
+            nidOrBirthCert: r.nid_or_birth_cert || '',
+            identificationMark: r.identification_mark || '',
+            reference: r.reference || '',
+            presentAddress: r.present_address || '',
+            permanentAddress: r.permanent_address || '',
+            emergencyContactName: r.emergency_contact_name || '',
+            emergencyContactPhone: r.emergency_contact_phone || '',
             status: r.status,
             createdAt: r.created_at,
           }));
@@ -1058,15 +1072,35 @@ export default {
 
     if (path === '/api/technicians' && method === 'POST') {
       try {
-        const { name, specialty, phone } = await request.json();
-        if (!name || !name.trim()) return jsonResponse({ error: 'Technician name is required' }, 400, corsHeaders);
+        const data = await request.json();
+        if (!data.name || !data.name.trim()) return jsonResponse({ error: 'Technician name is required' }, 400, corsHeaders);
         const id = `tech-${Date.now()}`;
         const created = await withDb(env, async (conn) => {
           await conn.query(
-            'INSERT INTO technicians (id, name, specialty, phone, status, created_at) VALUES (?, ?, ?, ?, "active", NOW())',
-            [id, name.trim(), specialty?.trim() || null, phone?.trim() || null]
+            `INSERT INTO technicians (
+              id, name, specialty, phone, email, facebook_link, photo, blood_group,
+              nid_or_birth_cert, identification_mark, reference, present_address, permanent_address,
+              emergency_contact_name, emergency_contact_phone, status, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "active", NOW())`,
+            [
+              id,
+              data.name.trim(),
+              data.specialty?.trim() || null,
+              data.phone?.trim() || null,
+              data.email?.trim() || null,
+              data.facebookLink?.trim() || null,
+              data.photo || null,
+              data.bloodGroup?.trim() || null,
+              data.nidOrBirthCert?.trim() || null,
+              data.identificationMark?.trim() || null,
+              data.reference?.trim() || null,
+              data.presentAddress?.trim() || null,
+              data.permanentAddress?.trim() || null,
+              data.emergencyContactName?.trim() || null,
+              data.emergencyContactPhone?.trim() || null,
+            ]
           );
-          return { id, name: name.trim(), specialty: specialty?.trim() || '', phone: phone?.trim() || '', status: 'active' };
+          return { ...data, id, status: 'active' };
         });
         return jsonResponse(created, 201, corsHeaders);
       } catch (err) {
@@ -1077,14 +1111,34 @@ export default {
     if (path.match(/^\/api\/technicians\/[^/]+$/) && method === 'PUT') {
       try {
         const id = path.split('/')[3];
-        const { name, specialty, phone } = await request.json();
-        if (!name || !name.trim()) return jsonResponse({ error: 'Technician name is required' }, 400, corsHeaders);
+        const data = await request.json();
+        if (!data.name || !data.name.trim()) return jsonResponse({ error: 'Technician name is required' }, 400, corsHeaders);
         const updated = await withDb(env, async (conn) => {
           await conn.query(
-            'UPDATE technicians SET name = ?, specialty = ?, phone = ?, updated_at = NOW() WHERE id = ?',
-            [name.trim(), specialty?.trim() || null, phone?.trim() || null, id]
+            `UPDATE technicians SET
+              name = ?, specialty = ?, phone = ?, email = ?, facebook_link = ?, photo = ?, blood_group = ?,
+              nid_or_birth_cert = ?, identification_mark = ?, reference = ?, present_address = ?, permanent_address = ?,
+              emergency_contact_name = ?, emergency_contact_phone = ?, updated_at = NOW()
+             WHERE id = ?`,
+            [
+              data.name.trim(),
+              data.specialty?.trim() || null,
+              data.phone?.trim() || null,
+              data.email?.trim() || null,
+              data.facebookLink?.trim() || null,
+              data.photo || null,
+              data.bloodGroup?.trim() || null,
+              data.nidOrBirthCert?.trim() || null,
+              data.identificationMark?.trim() || null,
+              data.reference?.trim() || null,
+              data.presentAddress?.trim() || null,
+              data.permanentAddress?.trim() || null,
+              data.emergencyContactName?.trim() || null,
+              data.emergencyContactPhone?.trim() || null,
+              id,
+            ]
           );
-          return { id, name: name.trim(), specialty: specialty?.trim() || '', phone: phone?.trim() || '', status: 'active' };
+          return { ...data, id, status: 'active' };
         });
         return jsonResponse(updated, 200, corsHeaders);
       } catch (err) {

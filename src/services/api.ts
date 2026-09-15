@@ -394,14 +394,14 @@ export const api = {
     }
   },
 
-  async createTechnician(data: { name: string; specialty?: string; phone?: string }): Promise<Technician> {
+  async createTechnician(data: Partial<Technician>): Promise<Technician> {
     return request<Technician>('/technicians', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   },
 
-  async updateTechnician(id: string, data: { name: string; specialty?: string; phone?: string }): Promise<Technician> {
+  async updateTechnician(id: string, data: Partial<Technician>): Promise<Technician> {
     return request<Technician>(`/technicians/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
