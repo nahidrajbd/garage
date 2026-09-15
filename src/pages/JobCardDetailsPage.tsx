@@ -401,28 +401,29 @@ export const JobCardDetailsPage: React.FC = () => {
                 Vehicle Condition / Damage Diagram
               </p>
               <div className="flex items-start gap-2">
-                <div className="relative w-24 shrink-0" style={{ aspectRatio: '448 / 524' }}>
-                  <img src={vehicleDiagram} alt="Vehicle diagram" className="w-full h-full object-contain" />
-                  {(jobCard.damageMarkers || []).map((m, idx) => (
-                    <div
-                      key={m.id}
-                      className="absolute w-3.5 h-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-red-600 text-white text-[8px] font-bold flex items-center justify-center border border-white"
-                      style={{ left: `${m.x}%`, top: `${m.y}%` }}
-                    >
-                      {idx + 1}
-                    </div>
-                  ))}
+                <div className="relative shrink-0" style={{ width: '210px', height: '180px' }}>
+                  <div
+                    className="absolute top-1/2 left-1/2"
+                    style={{ width: '154px', height: '180px', transform: 'translate(-50%, -50%) rotate(90deg)' }}
+                  >
+                    <img src={vehicleDiagram} alt="Vehicle diagram" className="w-full h-full object-contain" />
+                    {(jobCard.damageMarkers || []).map((m, idx) => (
+                      <div
+                        key={m.id}
+                        className="absolute w-3.5 h-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-red-600 text-white text-[8px] font-bold flex items-center justify-center border border-white"
+                        style={{ left: `${m.x}%`, top: `${m.y}%`, transform: 'translate(-50%, -50%) rotate(-90deg)' }}
+                      >
+                        {idx + 1}
+                      </div>
+                    ))}
+                  </div>
                 </div>
                 <div className="flex-1 space-y-0.5">
-                  {(jobCard.damageMarkers || []).length === 0 ? (
-                    <p className="text-[9px] text-gray-400 italic">No damage points marked</p>
-                  ) : (
-                    (jobCard.damageMarkers || []).map((m, idx) => (
-                      <p key={m.id} className="text-[9px] text-gray-700 leading-relaxed">
-                        <span className="font-bold">{idx + 1}.</span> {m.note || 'No description'}
-                      </p>
-                    ))
-                  )}
+                  {(jobCard.damageMarkers || []).map((m, idx) => (
+                    <p key={m.id} className="text-[9px] text-gray-700 leading-relaxed">
+                      <span className="font-bold">{idx + 1}.</span> {m.note || 'No description'}
+                    </p>
+                  ))}
                 </div>
               </div>
             </div>
