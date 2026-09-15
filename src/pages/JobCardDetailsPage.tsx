@@ -8,13 +8,10 @@ import {
   CheckCircle2,
   FileText,
   ClipboardList,
-  Camera,
+  Download,
   Phone,
+  Mail,
   MapPin,
-  Car,
-  User,
-  AlertCircle,
-  Calendar,
   ExternalLink
 } from 'lucide-react';
 import { JobCardStatusBadge } from '../components/common/Badge';
@@ -86,6 +83,61 @@ export const JobCardDetailsPage: React.FC = () => {
     if (!jobCard) return;
     navigate(`/invoices/new?fromJobCard=${jobCard.id}`);
   };
+
+  const printDateTime = new Date().toLocaleString('en-GB', {
+    day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+  });
+
+  // Compact letterhead repeated at the top of every printed page
+  const renderLetterhead = () => (
+    <div className="flex items-start justify-between gap-4 pb-3 border-b-2 border-gray-900">
+      <div className="flex items-center gap-2.5">
+        <div className="w-10 h-10 rounded-lg bg-gray-900 flex items-center justify-center text-white shrink-0">
+          <Wrench className="w-5 h-5" />
+        </div>
+        <div>
+          <h1 className="text-base font-extrabold font-heading text-gray-900 tracking-tight uppercase leading-tight">
+            {settings?.businessName || 'Arshi Automobile & Car Hub'}
+          </h1>
+          <p className="text-[10px] text-gray-500 font-medium">Your Trusted Automobile Partner in Rajshahi</p>
+        </div>
+      </div>
+      <div className="text-right text-[10px] text-gray-700 space-y-0.5 shrink-0">
+        <p className="flex items-center justify-end gap-1.5">
+          <span>{settings?.address || 'Rajshahi, Bangladesh'}</span>
+          <MapPin className="w-3 h-3 text-gray-500 shrink-0" />
+        </p>
+        <p className="flex items-center justify-end gap-1.5 font-mono">
+          <span>
+            {settings?.phone || '01712110902'}
+            {settings?.altPhone && ` / ${settings.altPhone}`}
+          </span>
+          <Phone className="w-3 h-3 text-gray-500 shrink-0" />
+        </p>
+        {settings?.email && (
+          <p className="flex items-center justify-end gap-1.5">
+            <span>{settings.email}</span>
+            <Mail className="w-3 h-3 text-gray-500 shrink-0" />
+          </p>
+        )}
+      </div>
+    </div>
+  );
+
+  // Shared signature block used at the bottom of every printed page
+  const renderSignatures = () => (
+    <div className="mt-8 pt-4 grid grid-cols-3 gap-4 text-[10px] text-gray-600">
+      <div className="text-center">
+        <div className="border-t border-gray-400 pt-1">Customer Signature</div>
+      </div>
+      <div className="text-center">
+        <div className="border-t border-gray-400 pt-1">Supervised By</div>
+      </div>
+      <div className="text-center">
+        <div className="border-t border-gray-400 pt-1">Authorized Signature</div>
+      </div>
+    </div>
+  );
 
   if (loading) {
     return (
@@ -170,6 +222,17 @@ export const JobCardDetailsPage: React.FC = () => {
             <span>Print Job Card</span>
           </button>
 
+          {/* Download PDF - reuses the browser's print dialog, where "Save as PDF" is a destination */}
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-gray-700 bg-white hover:bg-gray-100 border border-gray-300 rounded-xl shadow-2xs transition-colors"
+            title="Use 'Save as PDF' as the destination in the print dialog"
+          >
+            <Download className="w-4 h-4" />
+            <span>Download PDF</span>
+          </button>
+
           {/* Create Quotation */}
           <button
             type="button"
@@ -229,221 +292,221 @@ export const JobCardDetailsPage: React.FC = () => {
         </div>
       )}
 
-      {/* Printable Job Card Sheet */}
-      <div className="printable-invoice bg-white p-8 sm:p-10 rounded-2xl border border-gray-200/90 shadow-md text-gray-900 font-sans">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start gap-6 pb-6 border-b-2 border-gray-800">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-black tracking-widest text-[#C1121F] uppercase font-mono">
-                NEXTGARAGE
-              </span>
-            </div>
-            <div className="flex items-center gap-2.5 mt-1">
-              <div className="w-8 h-8 rounded-lg bg-[#C1121F] flex items-center justify-center text-white shrink-0">
-                <Wrench className="w-4 h-4" />
-              </div>
-              <h1 className="text-2xl font-extrabold font-heading text-gray-900 tracking-tight uppercase">
-                {settings?.businessName || 'Arshi Automobile & Car Hub'}
-              </h1>
-            </div>
-            <p className="text-xs font-medium text-gray-600 mt-2 flex items-center gap-1.5">
-              <MapPin className="w-3.5 h-3.5 text-[#C1121F] shrink-0" />
-              <span>{settings?.address || 'Rajshahi, Bangladesh'}</span>
-            </p>
-            <p className="text-xs font-medium text-gray-800 mt-1 flex items-center gap-1.5 font-mono">
-              <Phone className="w-3.5 h-3.5 text-[#C1121F] shrink-0" />
-              <span>Phone: {settings?.phone || '01712110902'}</span>
-              {settings?.altPhone && <span>/ {settings.altPhone}</span>}
-            </p>
-          </div>
+      {/* Printable Job Card Sheet - A4, 2 pages */}
+      <div className="printable-invoice bg-white text-gray-900 font-sans text-xs">
 
-          <div className="text-left sm:text-right space-y-1">
-            <div className="inline-block bg-gray-900 text-white font-mono text-xs px-3 py-1 rounded font-bold uppercase tracking-wider mb-1">
-              WORKSHOP JOB CARD
-            </div>
-            <p className="font-mono text-lg font-extrabold text-[#C1121F]">
-              {jobCard.jobCardNumber}
-            </p>
-            <p className="text-xs text-gray-600">
-              Intake Date: <strong>{formatDate(jobCard.date)}</strong>
-            </p>
-            {jobCard.expectedDeliveryDate && (
-              <p className="text-xs text-gray-600">
-                Expected Delivery: <strong>{formatDate(jobCard.expectedDeliveryDate)}</strong>
-              </p>
-            )}
-            <div className="pt-1">
-              <JobCardStatusBadge status={jobCard.status} />
-            </div>
-          </div>
-        </div>
+        {/* ============ PAGE 1: JOB CARD / SERVICE DETAILS ============ */}
+        <div className="print-page avoid-break bg-white p-6 sm:p-8 rounded-2xl border border-gray-200/90 shadow-md print:rounded-none print:border-0 print:shadow-none">
+          {renderLetterhead()}
 
-        {/* Customer & Vehicle Info Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-5 border-b border-gray-200 text-xs">
-          <div className="p-3.5 bg-gray-50/80 rounded-xl border border-gray-200/80 space-y-1">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider font-heading">
-              Customer Information
-            </p>
-            <p className="text-sm font-bold text-gray-900">{jobCard.customerName}</p>
-            <p className="font-mono text-gray-600">Phone: {jobCard.customerPhone}</p>
-          </div>
-
-          <div className="p-3.5 bg-gray-50/80 rounded-xl border border-gray-200/80 space-y-1">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider font-heading">
-              Vehicle & Assignment
-            </p>
-            <p className="text-sm font-bold text-gray-900">{jobCard.vehicleModel}</p>
-            <div className="flex items-center gap-2 pt-0.5">
-              <span className="font-mono font-medium text-gray-800 bg-white px-1.5 py-0.5 rounded border border-gray-200">
-                {jobCard.vehicleRegistration}
-              </span>
-              {jobCard.mileage && (
-                <span className="font-mono text-gray-500">
-                  Mileage: {jobCard.mileage}
-                </span>
-              )}
-            </div>
-            <p className="text-[11px] text-gray-600 pt-1">
-              Assigned To: <strong className="text-gray-900">{jobCard.assignedTo}</strong>
-            </p>
-          </div>
-        </div>
-
-        {/* Customer Complaint / Request */}
-        <div className="py-5 border-b border-gray-200 space-y-1.5">
-          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider font-heading">
-            Customer Complaint / Request
-          </p>
-          <div className="p-3.5 bg-red-50/40 rounded-xl border border-red-100 text-gray-900 text-xs leading-relaxed font-medium">
-            {jobCard.customerComplaint}
-          </div>
-        </div>
-
-        {/* Required Work Table */}
-        <div className="py-5 border-b border-gray-200 space-y-2">
-          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider font-heading">
-            Required Work / Tasks Checklist
-          </p>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="border-b border-gray-300 text-gray-600 uppercase text-[10px] font-bold">
-                  <th className="py-2 px-2 w-10 text-center">#</th>
-                  <th className="py-2 px-2 w-1/3">Service / Task</th>
-                  <th className="py-2 px-2">Work Scope / Details</th>
-                  <th className="py-2 px-2 w-20 text-center">Status</th>
+          {/* Title + Meta */}
+          <div className="flex items-start justify-between gap-4 py-3 border-b border-gray-300">
+            <h2 className="text-xl font-extrabold font-heading uppercase tracking-widest text-gray-900">
+              Job Card
+            </h2>
+            <table className="text-[10px] text-gray-700">
+              <tbody>
+                <tr>
+                  <td className="pr-2 font-bold text-gray-500 uppercase">Job Card No:</td>
+                  <td className="font-mono font-bold text-gray-900">{jobCard.jobCardNumber}</td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {jobCard.requiredWork.map((work, idx) => (
-                  <tr key={work.id}>
-                    <td className="py-2.5 px-2 text-center text-gray-400 font-mono text-xs">
-                      {idx + 1}
-                    </td>
-                    <td className="py-2.5 px-2 font-bold text-gray-900">
-                      {work.serviceName}
-                    </td>
-                    <td className="py-2.5 px-2 text-gray-600">
-                      {work.description || '-'}
-                    </td>
-                    <td className="py-2.5 px-2 text-center">
-                      <span className="inline-block w-4 h-4 border border-gray-400 rounded"></span>
-                    </td>
-                  </tr>
-                ))}
+                <tr>
+                  <td className="pr-2 font-bold text-gray-500 uppercase">Job Date:</td>
+                  <td className="font-mono">{formatDate(jobCard.date)}</td>
+                </tr>
+                <tr>
+                  <td className="pr-2 font-bold text-gray-500 uppercase">Expected Delivery:</td>
+                  <td className="font-mono">{jobCard.expectedDeliveryDate ? formatDate(jobCard.expectedDeliveryDate) : '-'}</td>
+                </tr>
+                <tr>
+                  <td className="pr-2 font-bold text-gray-500 uppercase">Print Date:</td>
+                  <td className="font-mono">{printDateTime}</td>
+                </tr>
               </tbody>
             </table>
           </div>
+
+          {/* Customer & Vehicle Details */}
+          <div className="grid grid-cols-2 gap-0 border border-gray-300 border-t-0 text-[11px]">
+            <div className="p-2.5 border-r border-gray-300">
+              <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-200 pb-1 mb-1.5">
+                Customer Details
+              </p>
+              <p><span className="font-bold text-gray-500">Name:</span> {jobCard.customerName}</p>
+              <p><span className="font-bold text-gray-500">Phone:</span> {jobCard.customerPhone}</p>
+              <p><span className="font-bold text-gray-500">Address:</span> ____________________</p>
+            </div>
+            <div className="p-2.5">
+              <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-200 pb-1 mb-1.5">
+                Vehicle Details
+              </p>
+              <p><span className="font-bold text-gray-500">Vehicle:</span> {jobCard.vehicleModel}</p>
+              <p><span className="font-bold text-gray-500">Registration:</span> {jobCard.vehicleRegistration}</p>
+              <p><span className="font-bold text-gray-500">Chassis No:</span> ____________________</p>
+              <p><span className="font-bold text-gray-500">Engine No:</span> ____________________</p>
+              <p><span className="font-bold text-gray-500">KM:</span> {jobCard.mileage || '____________'}</p>
+            </div>
+          </div>
+
+          {/* Staff / Status / Fuel */}
+          <div className="grid grid-cols-3 gap-0 border border-gray-300 border-t-0 text-[11px]">
+            <div className="p-2.5 border-r border-gray-300">
+              <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-200 pb-1 mb-1.5">
+                Staff / Responsibility
+              </p>
+              <p><span className="font-bold text-gray-500">Supervised By:</span> ________________</p>
+              <p><span className="font-bold text-gray-500">Technician:</span> {jobCard.assignedTo}</p>
+              <p><span className="font-bold text-gray-500">Created By:</span> ________________</p>
+            </div>
+            <div className="p-2.5 border-r border-gray-300">
+              <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-200 pb-1 mb-1.5">
+                Fuel Level
+              </p>
+              <div className="flex items-center gap-1.5 flex-wrap text-[10px] pt-0.5">
+                {['Empty', '1/4', '1/2', '3/4', 'Full'].map(level => (
+                  <span key={level} className="inline-flex items-center gap-1">
+                    <span className="inline-block w-3 h-3 border border-gray-500"></span>
+                    {level}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div className="p-2.5">
+              <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-200 pb-1 mb-1.5">
+                Service Status
+              </p>
+              <JobCardStatusBadge status={jobCard.status} />
+            </div>
+          </div>
+
+          {/* Complaint + Vehicle Condition Diagram */}
+          <div className="grid grid-cols-2 gap-0 border border-gray-300 border-t-0 text-[11px]">
+            <div className="p-2.5 border-r border-gray-300 space-y-2">
+              <div>
+                <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-200 pb-1 mb-1.5">
+                  Customer Complaint
+                </p>
+                <p className="leading-relaxed">{jobCard.customerComplaint}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-200 pb-1 mb-1.5">
+                  Reported Defects / Inspection Notes
+                </p>
+                <p className="leading-relaxed text-gray-700">{jobCard.vehicleCondition || '____________________________________'}</p>
+              </div>
+            </div>
+            <div className="p-2.5">
+              <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider border-b border-gray-200 pb-1 mb-1.5">
+                Vehicle Condition / Damage Diagram
+              </p>
+              <div className="flex items-center justify-center py-2">
+                <svg viewBox="0 0 200 90" className="w-full max-w-[220px] h-auto text-gray-500" fill="none" stroke="currentColor" strokeWidth="1.5">
+                  <rect x="20" y="20" width="160" height="50" rx="10" />
+                  <rect x="45" y="8" width="90" height="20" rx="6" />
+                  <line x1="60" y1="20" x2="60" y2="70" />
+                  <line x1="140" y1="20" x2="140" y2="70" />
+                  <circle cx="50" cy="72" r="7" />
+                  <circle cx="150" cy="72" r="7" />
+                </svg>
+              </div>
+              <p className="text-[9px] text-gray-500 leading-relaxed">
+                Mark affected area(s): Front / Rear Bumper, Bonnet, Roof, L/R Doors, L/R Fenders, Trunk —
+                <span className="italic"> note below.</span>
+              </p>
+              <p className="border-b border-gray-300 h-4 mt-1"></p>
+            </div>
+          </div>
+
+          {/* Service / Work List */}
+          <div className="border border-gray-300 border-t-0">
+            <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider px-2.5 pt-2">
+              Service / Work List
+            </p>
+            <table className="w-full text-left text-[11px] mt-1">
+              <thead>
+                <tr className="border-y border-gray-300 bg-gray-50 text-gray-600 uppercase text-[9px] font-bold">
+                  <th className="py-1.5 px-2 w-8 text-center">SL</th>
+                  <th className="py-1.5 px-2">Service / Work Description</th>
+                  <th className="py-1.5 px-2 w-24 text-right">Price</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {jobCard.requiredWork.map((work, idx) => (
+                  <tr key={work.id}>
+                    <td className="py-1.5 px-2 text-center text-gray-400 font-mono">{idx + 1}</td>
+                    <td className="py-1.5 px-2">
+                      <span className="font-bold text-gray-900">{work.serviceName}</span>
+                      {work.description && <span className="text-gray-600"> — {work.description}</span>}
+                    </td>
+                    <td className="py-1.5 px-2 text-right text-gray-400">৳</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t border-gray-300 font-bold">
+                  <td className="py-1.5 px-2" colSpan={2}>Subtotal</td>
+                  <td className="py-1.5 px-2 text-right">৳</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          {/* Workshop Notes */}
+          <div className="p-2.5 border border-gray-300 border-t-0 text-[11px]">
+            <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider pb-1 mb-1">
+              Workshop Notes
+            </p>
+            <p className="leading-relaxed text-gray-700">{jobCard.notes || '____________________________________________________________'}</p>
+          </div>
+
+          {renderSignatures()}
+
+          <p className="text-center text-[9px] text-gray-400 mt-4">Page 1 of 2</p>
         </div>
 
-        {/* Vehicle Condition / Notes */}
-        {jobCard.vehicleCondition && (
-          <div className="py-5 border-b border-gray-200 space-y-1.5">
-            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider font-heading">
-              Vehicle Condition / Pre-existing Remarks
-            </p>
-            <div className="p-3 bg-amber-50/60 rounded-xl border border-amber-200/80 text-amber-950 text-xs leading-relaxed">
-              {jobCard.vehicleCondition}
-            </div>
-          </div>
-        )}
+        {/* ============ PAGE 2: PARTS / PRODUCTS ============ */}
+        <div className="print-page avoid-break bg-white p-6 sm:p-8 rounded-2xl border border-gray-200/90 shadow-md print:rounded-none print:border-0 print:shadow-none">
+          {renderLetterhead()}
 
-        {/* Photos Preview (if any) */}
-        {((jobCard.beforePhotos && jobCard.beforePhotos.length > 0) ||
-          (jobCard.afterPhotos && jobCard.afterPhotos.length > 0)) && (
-          <div className="py-5 border-b border-gray-200 space-y-3">
-            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider font-heading">
-              Vehicle Inspection Photos
-            </p>
+          <h2 className="text-lg font-extrabold font-heading uppercase tracking-widest text-gray-900 text-center py-3 border-b border-gray-300">
+            Parts / Products
+          </h2>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {jobCard.beforePhotos && jobCard.beforePhotos.length > 0 && (
-                <div className="space-y-1.5">
-                  <span className="text-[10px] font-bold text-gray-500 uppercase">Before Photos</span>
-                  <div className="grid grid-cols-2 gap-2">
-                    {jobCard.beforePhotos.map((photo, idx) => (
-                      <div key={idx} className="rounded-lg overflow-hidden border border-gray-200 aspect-video bg-gray-100">
-                        <img src={photo} alt="Before" className="w-full h-full object-cover" />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {jobCard.afterPhotos && jobCard.afterPhotos.length > 0 && (
-                <div className="space-y-1.5">
-                  <span className="text-[10px] font-bold text-gray-500 uppercase">After Photos</span>
-                  <div className="grid grid-cols-2 gap-2">
-                    {jobCard.afterPhotos.map((photo, idx) => (
-                      <div key={idx} className="rounded-lg overflow-hidden border border-gray-200 aspect-video bg-gray-100">
-                        <img src={photo} alt="After" className="w-full h-full object-cover" />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Staff Notes */}
-        {jobCard.notes && (
-          <div className="py-4 border-b border-gray-200 text-xs text-gray-600">
-            <span className="font-bold text-gray-800">Workshop Remarks: </span>
-            <span>{jobCard.notes}</span>
-          </div>
-        )}
-
-        {/* Blank Handwritten Notes Table */}
-        <div className="py-4 border-b border-gray-200">
-          <table className="w-full border-collapse text-xs">
+          <table className="w-full text-left text-[11px] border border-gray-300">
+            <thead>
+              <tr className="border-b border-gray-300 bg-gray-50 text-gray-600 uppercase text-[9px] font-bold">
+                <th className="py-1.5 px-2 w-8 text-center border-r border-gray-300">SL</th>
+                <th className="py-1.5 px-2 border-r border-gray-300">Product</th>
+                <th className="py-1.5 px-2 w-20 border-r border-gray-300">SP Code</th>
+                <th className="py-1.5 px-2 w-16 text-right border-r border-gray-300">Req. Qty</th>
+                <th className="py-1.5 px-2 w-16 text-right border-r border-gray-300">Dis. Qty</th>
+                <th className="py-1.5 px-2 w-20 text-right">Total</th>
+              </tr>
+            </thead>
             <tbody>
-              {Array.from({ length: 6 }).map((_, idx) => (
-                <tr key={idx}>
-                  <td className="border border-gray-300 h-9 w-1/2"></td>
-                  <td className="border border-gray-300 h-9 w-1/2"></td>
+              {Array.from({ length: 18 }).map((_, idx) => (
+                <tr key={idx} className="border-b border-gray-200">
+                  <td className="py-2 px-2 text-center text-gray-400 font-mono border-r border-gray-200">{idx + 1}</td>
+                  <td className="py-2 px-2 border-r border-gray-200">&nbsp;</td>
+                  <td className="py-2 px-2 border-r border-gray-200">&nbsp;</td>
+                  <td className="py-2 px-2 border-r border-gray-200">&nbsp;</td>
+                  <td className="py-2 px-2 border-r border-gray-200">&nbsp;</td>
+                  <td className="py-2 px-2">&nbsp;</td>
                 </tr>
               ))}
             </tbody>
+            <tfoot>
+              <tr className="border-t-2 border-gray-400 font-bold">
+                <td className="py-2 px-2" colSpan={5}>Subtotal</td>
+                <td className="py-2 px-2 text-right">৳ 0.00</td>
+              </tr>
+            </tfoot>
           </table>
-        </div>
 
-        {/* Signatures & Footer */}
-        <div className="mt-12 pt-6 border-t border-gray-200 grid grid-cols-2 gap-6 text-xs text-gray-500">
-          <div className="text-center sm:text-left">
-            <div className="w-40 border-t border-gray-400 mx-auto sm:mr-auto"></div>
-            <p className="text-[10px] text-gray-400 uppercase tracking-wider mt-1">Customer Acknowledgement</p>
-          </div>
-          <div className="text-center sm:text-right">
-            <div className="w-40 border-t border-gray-400 mx-auto sm:ml-auto"></div>
-            <p className="text-[10px] text-gray-400 uppercase tracking-wider mt-1">Workshop In-Charge Signature</p>
-          </div>
-        </div>
+          {renderSignatures()}
 
-        <p className="text-center text-[11px] text-gray-400 mt-8">
-          {settings?.defaultFooterText || 'Thank you for choosing Arshi Automobile & Car Hub.'}
-        </p>
+          <p className="text-center text-[9px] text-gray-400 mt-4">Page 2 of 2</p>
+        </div>
       </div>
     </div>
   );

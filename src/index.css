@@ -47,6 +47,14 @@
     color: #000000 !important;
   }
 
+  /* Chromium won't paginate descendants of a scroll/overflow container -
+     the app shell clips to the viewport for the normal scrolling UI, which
+     silently collapses a multi-page printable document onto one page. */
+  html, body, .app-shell, .app-content, .app-main {
+    height: auto !important;
+    overflow: visible !important;
+  }
+
   .no-print {
     display: none !important;
   }
@@ -62,6 +70,21 @@
     max-width: 100% !important;
     padding: 0 !important;
     margin: 0 !important;
+  }
+
+  .print-page {
+    page-break-after: always;
+    break-after: page;
+  }
+
+  .print-page:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
+
+  .avoid-break {
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
 }
 
