@@ -1041,6 +1041,10 @@ export default {
       try {
         const showAll = url.searchParams.get('status') === 'all';
         const technicians = await withDb(env, async (conn) => {
+          // Self-healing: ensure the terminated_date column exists (added in Oct 2026 migration)
+          await conn.query(
+            `ALTER TABLE technicians ADD COLUMN IF NOT EXISTS terminated_date DATE NULL DEFAULT NULL`
+          ).catch(() => {}); // silently ignore if syntax not supported (older MySQL)
           const [rows] = await conn.query(
             `SELECT id, name, specialty, phone, email, facebook_link, photo, blood_group,
                     nid_or_birth_cert, identification_mark, reference, present_address, permanent_address,
