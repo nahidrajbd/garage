@@ -72,6 +72,7 @@ async function withDb(env, fn) {
     password: env.DB_PASSWORD || 'ycs-iymH3ybo',
     database: env.DB_NAME || 'nextpostmedia_garage',
     disableEval: true,
+    timezone: '+06:00', // DB server clock is Bangladesh Standard Time - without this mysql2 misreads DATETIME values as UTC, skewing every timestamp by 6 hours
   });
   try {
     return await fn(conn);
@@ -90,6 +91,7 @@ async function withTransaction(env, fn) {
     password: env.DB_PASSWORD || 'ycs-iymH3ybo',
     database: env.DB_NAME || 'nextpostmedia_garage',
     disableEval: true,
+    timezone: '+06:00', // DB server clock is Bangladesh Standard Time - without this mysql2 misreads DATETIME values as UTC, skewing every timestamp by 6 hours
   });
   await conn.beginTransaction();
   try {
