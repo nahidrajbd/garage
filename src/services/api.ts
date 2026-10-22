@@ -413,6 +413,24 @@ export const api = {
     return true;
   },
 
+  async terminateTechnician(id: string): Promise<{ success: boolean; terminatedDate: string }> {
+    return request(`/technicians/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'inactive' }),
+    });
+  },
+
+  async reinstateTechnician(id: string): Promise<{ success: boolean }> {
+    return request(`/technicians/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'active' }),
+    });
+  },
+
+  async getTechniciansAll(): Promise<Technician[]> {
+    return request<Technician[]>('/technicians?status=all');
+  },
+
   async getStaffList(): Promise<string[]> {
     try {
       const techs = await this.getTechnicians();

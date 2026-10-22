@@ -1039,13 +1039,15 @@ export default {
     // ----------------------------------------------------
     if (path === '/api/technicians' && method === 'GET') {
       try {
+        const showAll = url.searchParams.get('status') === 'all';
         const technicians = await withDb(env, async (conn) => {
           const [rows] = await conn.query(
             `SELECT id, name, specialty, phone, email, facebook_link, photo, blood_group,
                     nid_or_birth_cert, identification_mark, reference, present_address, permanent_address,
                     emergency_contact_name, emergency_contact_phone, DATE_FORMAT(joining_date, '%Y-%m-%d') as joining_date,
+                    DATE_FORMAT(terminated_date, '%Y-%m-%d') as terminated_date,
                     status, created_at
-             FROM technicians WHERE status = "active" ORDER BY name ASC`
+             FROM technicians ${showAll ? '' : 'WHERE status = "active"'} ORDER BY status ASC, name ASC`
           );
           return rows.map(r => ({
             id: r.id,
@@ -1064,6 +1066,7 @@ export default {
             emergencyContactName: r.emergency_contact_name || '',
             emergencyContactPhone: r.emergency_contact_phone || '',
             joiningDate: r.joining_date || '',
+            terminatedDate: r.terminated_date || '',
             status: r.status,
             createdAt: r.created_at,
           }));
@@ -1163,6 +1166,36 @@ export default {
           await conn.query('UPDATE technicians SET status = "inactive", updated_at = NOW() WHERE id = ?', [id]);
         });
         return jsonResponse({ success: true, message: 'Technician deleted successfully' }, 200, corsHeaders);
+      } catch (err) {
+        return jsonResponse({ error: err.message }, 500, corsHeaders);
+      }
+    }
+
+    // PATCH /api/technicians/:id/status — terminate or reinstate
+    if (path.match(/^\/api\/technicians\/[^/]+\/status$/) && method === 'PATCH') {
+      const user = getUser(request, env);
+      if (!user) return jsonResponse({ error: 'Unauthorized' }, 401, corsHeaders);
+      try {
+        const id = path.split('/')[3];
+        const { status } = await request.json();
+        if (status !== 'active' && status !== 'inactive') {
+          return jsonResponse({ error: 'Invalid status value' }, 400, corsHeaders);
+        }
+        const terminatedDate = status === 'inactive' ? new Date().toISOString().split('T')[0] : null;
+        await withDb(env, async (conn) => {
+          await conn.query(
+            'UPDATE technicians SET status = ?, terminated_date = ?, updated_at = NOW() WHERE id = ?',
+            [status, terminatedDate, id]
+          );
+        });
+        const label = status === 'inactive' ? 'terminated' : 'reinstated';
+        await logActivity(env, user, {
+          action: status === 'inactive' ? 'terminate' : 'reinstate',
+          entityType: 'technician',
+          entityId: id,
+          description: `${user.name} ${label} technician ${id}`
+        });
+        return jsonResponse({ success: true, status, terminatedDate }, 200, corsHeaders);
       } catch (err) {
         return jsonResponse({ error: err.message }, 500, corsHeaders);
       }

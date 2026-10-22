@@ -32,6 +32,7 @@ export interface Technician {
   emergencyContactName?: string;
   emergencyContactPhone?: string;
   joiningDate?: string;
+  terminatedDate?: string;
   status: 'active' | 'inactive';
   createdAt?: string;
 }

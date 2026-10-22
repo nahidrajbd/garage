@@ -479,3 +479,11 @@ INSERT IGNORE INTO `vehicles` (`id`, `customer_id`, `registration_number`, `make
 ('veh-3', 'cust-3', 'Rajshahi Metro-Kha 12-9988', 'Nissan', 'X-Trail Hybrid', '2020', 'Metallic Silver');
 
 SET FOREIGN_KEY_CHECKS = 1;
+
+-- --------------------------------------------------------------------
+-- Migration: Add terminated_date to technicians
+-- Run once on existing databases that lack this column.
+-- Safe to re-run (ALTER IGNORE / column existence check).
+-- --------------------------------------------------------------------
+ALTER TABLE `technicians`
+  ADD COLUMN IF NOT EXISTS `terminated_date` DATE NULL DEFAULT NULL;

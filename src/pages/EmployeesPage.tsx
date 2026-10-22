@@ -7,7 +7,9 @@ import {
   Check,
   Phone,
   FileText,
-  Printer
+  Printer,
+  UserX,
+  RotateCcw
 } from 'lucide-react';
 import { Modal } from '../components/common/Modal';
 import { useApp } from '../context/AppContext';
@@ -62,6 +64,7 @@ export const EmployeesPage: React.FC = () => {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [technicians, setTechnicians] = useState<Technician[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showTerminated, setShowTerminated] = useState(false);
 
   const emptyTechForm: TechnicianFormState = {
     name: '', specialty: '', phone: '', email: '', facebookLink: '', photo: '',
@@ -90,7 +93,7 @@ export const EmployeesPage: React.FC = () => {
       try {
         const [sett, techs] = await Promise.all([
           api.getSettings(),
-          api.getTechnicians()
+          api.getTechniciansAll()
         ]);
         setSettings(sett);
         setTechnicians(techs);
@@ -209,6 +212,34 @@ export const EmployeesPage: React.FC = () => {
     }
   };
 
+  const handleTerminateTechnician = async (id: string, name: string) => {
+    try {
+      await api.terminateTechnician(id);
+      setTechnicians(prev => prev.map(t =>
+        t.id === id ? { ...t, status: 'inactive' as const, terminatedDate: new Date().toISOString().split('T')[0] } : t
+      ));
+      showToast(`${name} has been marked as terminated.`, 'info');
+      triggerRefresh();
+    } catch (err: any) {
+      console.error(err);
+      showToast(err.message || 'Failed to terminate technician', 'error');
+    }
+  };
+
+  const handleReinstateTechnician = async (id: string, name: string) => {
+    try {
+      await api.reinstateTechnician(id);
+      setTechnicians(prev => prev.map(t =>
+        t.id === id ? { ...t, status: 'active' as const, terminatedDate: '' } : t
+      ));
+      showToast(`${name} has been reinstated as active.`, 'success');
+      triggerRefresh();
+    } catch (err: any) {
+      console.error(err);
+      showToast(err.message || 'Failed to reinstate technician', 'error');
+    }
+  };
+
   // Document Handlers
   const handleOpenDocModal = (tech: Technician) => {
     setDocModalTech(tech);
@@ -240,6 +271,25 @@ export const EmployeesPage: React.FC = () => {
             Workshop technicians & specialists — full profiles and employment documents.
           </p>
         </div>
+        <button
+          type="button"
+          onClick={() => setShowTerminated(v => !v)}
+          className={`inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-xl border transition-all cursor-pointer ${
+            showTerminated
+              ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+              : 'bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200'
+          }`}
+        >
+          <UserX className="w-3.5 h-3.5" />
+          {showTerminated ? 'Hide Terminated' : 'Show Terminated'}
+          {technicians.filter(t => t.status === 'inactive').length > 0 && (
+            <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold ${
+              showTerminated ? 'bg-amber-200 text-amber-800' : 'bg-gray-200 text-gray-700'
+            }`}>
+              {technicians.filter(t => t.status === 'inactive').length}
+            </span>
+          )}
+        </button>
       </div>
 
       {/* Technicians Section */}
@@ -260,7 +310,7 @@ export const EmployeesPage: React.FC = () => {
           </div>
           <div className="flex items-center gap-2">
             <span className="text-xs font-mono font-semibold text-gray-500 bg-gray-100 px-2.5 py-1 rounded-lg">
-              {technicians.length} Technicians
+              {technicians.filter(t => t.status === 'active').length} Active
             </span>
             <button
               type="button"
@@ -275,23 +325,45 @@ export const EmployeesPage: React.FC = () => {
 
         {/* Technicians List Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {technicians.map(tech => (
+          {technicians.filter(t => showTerminated ? t.status === 'inactive' : t.status === 'active').map(tech => (
             <div
               key={tech.id}
-              className="p-4 rounded-xl border border-gray-200 bg-white hover:border-gray-300 hover:shadow-xs transition-all flex flex-col justify-between gap-3"
+              className={`p-4 rounded-xl border transition-all flex flex-col justify-between gap-3 ${
+                tech.status === 'inactive'
+                  ? 'bg-gray-50 border-gray-200 opacity-75'
+                  : 'bg-white border-gray-200 hover:border-gray-300 hover:shadow-xs'
+              }`}
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="flex items-start gap-3">
-                  {tech.photo ? (
-                    <img src={tech.photo} alt={tech.name} className="w-12 h-12 rounded-full object-cover border border-gray-200 shrink-0" />
-                  ) : (
-                    <div className="w-12 h-12 rounded-full bg-gray-100 text-gray-400 flex items-center justify-center shrink-0 font-bold font-heading">
-                      {tech.name.charAt(0).toUpperCase()}
-                    </div>
-                  )}
+                  <div className="relative shrink-0">
+                    {tech.photo ? (
+                      <img src={tech.photo} alt={tech.name} className={`w-12 h-12 rounded-full object-cover border border-gray-200 ${
+                        tech.status === 'inactive' ? 'grayscale' : ''
+                      }`} />
+                    ) : (
+                      <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 font-bold font-heading ${
+                        tech.status === 'inactive' ? 'bg-gray-200 text-gray-400' : 'bg-gray-100 text-gray-400'
+                      }`}>
+                        {tech.name.charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                    {tech.status === 'inactive' && (
+                      <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-amber-500 rounded-full flex items-center justify-center">
+                        <UserX className="w-2.5 h-2.5 text-white" />
+                      </div>
+                    )}
+                  </div>
                   <div>
-                    <h4 className="text-sm font-bold text-gray-900 font-heading">{tech.name}</h4>
-                    {tech.specialty && (
+                    <h4 className={`text-sm font-bold font-heading ${
+                      tech.status === 'inactive' ? 'text-gray-500 line-through decoration-gray-400' : 'text-gray-900'
+                    }`}>{tech.name}</h4>
+                    {tech.status === 'inactive' && (
+                      <span className="inline-block mt-0.5 px-2 py-0.5 bg-amber-50 text-amber-700 text-[11px] font-semibold rounded-md border border-amber-200">
+                        Terminated
+                      </span>
+                    )}
+                    {tech.status === 'active' && tech.specialty && (
                       <span className="inline-block mt-1 px-2 py-0.5 bg-red-50 text-red-700 text-[11px] font-medium rounded-md border border-red-100">
                         {tech.specialty}
                       </span>
@@ -312,24 +384,53 @@ export const EmployeesPage: React.FC = () => {
                         Joined: <span className="font-semibold text-gray-700">{tech.joiningDate}</span>
                       </div>
                     )}
+                    {tech.status === 'inactive' && tech.terminatedDate && (
+                      <div className="mt-0.5 text-[11px] text-amber-600 font-medium">
+                        Terminated: <span className="font-semibold">{tech.terminatedDate}</span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
                 <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => handleStartEditTech(tech)}
-                    title="Edit Full Profile"
-                    className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
-                  >
-                    <Edit2 className="w-3.5 h-3.5" />
-                  </button>
+                  {tech.status === 'active' && (
+                    <button
+                      type="button"
+                      onClick={() => handleStartEditTech(tech)}
+                      title="Edit Full Profile"
+                      className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+
+                  {tech.status === 'active' && (
+                    <button
+                      type="button"
+                      onClick={() => handleTerminateTechnician(tech.id, tech.name)}
+                      title="Mark as Terminated"
+                      className="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer"
+                    >
+                      <UserX className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+
+                  {tech.status === 'inactive' && (
+                    <button
+                      type="button"
+                      onClick={() => handleReinstateTechnician(tech.id, tech.name)}
+                      title="Reinstate Employee"
+                      className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                    </button>
+                  )}
 
                   {canDelete && (
                     <button
                       type="button"
                       onClick={() => handleDeleteTechnician(tech.id, tech.name)}
-                      title="Delete Technician"
+                      title="Delete Permanently"
                       className="p-1.5 text-gray-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -338,21 +439,35 @@ export const EmployeesPage: React.FC = () => {
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() => handleOpenDocModal(tech)}
-                className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors cursor-pointer"
-              >
-                <FileText className="w-3.5 h-3.5" />
-                <span>Print Document</span>
-              </button>
+              {tech.status === 'active' && (
+                <button
+                  type="button"
+                  onClick={() => handleOpenDocModal(tech)}
+                  className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors cursor-pointer"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>Print Document</span>
+                </button>
+              )}
+              {tech.status === 'inactive' && (
+                <button
+                  type="button"
+                  onClick={() => handleOpenDocModal(tech)}
+                  className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors cursor-pointer border border-amber-200"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>Print Termination Doc</span>
+                </button>
+              )}
             </div>
           ))}
         </div>
 
-        {!loading && technicians.length === 0 && (
+        {!loading && technicians.filter(t => showTerminated ? t.status === 'inactive' : t.status === 'active').length === 0 && (
           <div className="p-8 text-center text-sm text-gray-400 border-2 border-dashed border-gray-200 rounded-xl">
-            No technicians added yet. Click "Add Technician" to create the first employee profile.
+            {showTerminated
+              ? 'No terminated employees. Active employees can be marked as terminated using the ⊗ button.'
+              : 'No active technicians. Click "Add Technician" to create the first employee profile.'}
           </div>
         )}
       </div>
