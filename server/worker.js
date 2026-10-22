@@ -2201,11 +2201,23 @@ export default {
       try {
         const id = path.split('/')[3];
         const invoice = await withDb(env, async (conn) => {
+          // Self-heal: ensure invoice_technicians junction table exists
+          await conn.query(`
+            CREATE TABLE IF NOT EXISTS invoice_technicians (
+              invoice_id VARCHAR(50) NOT NULL,
+              technician_id VARCHAR(50) NOT NULL,
+              technician_name VARCHAR(191) NOT NULL,
+              PRIMARY KEY (invoice_id, technician_id),
+              INDEX idx_inv_tech_invoice (invoice_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+          `).catch(() => {});
+
           const [invRows] = await conn.query('SELECT * FROM invoices WHERE id = ?', [id]);
           if (invRows.length === 0) return null;
           const inv = invRows[0];
           const [items] = await conn.query('SELECT * FROM invoice_items WHERE invoice_id = ? ORDER BY sort_order ASC', [id]);
           const [payments] = await conn.query('SELECT * FROM payments WHERE invoice_id = ? ORDER BY payment_date ASC', [id]);
+          const [techRows] = await conn.query('SELECT technician_id, technician_name FROM invoice_technicians WHERE invoice_id = ?', [id]);
 
           return {
             id: inv.id,
@@ -2223,6 +2235,8 @@ export default {
             due: Number(inv.due),
             status: inv.status === 'paid' ? 'Paid' : inv.status === 'partial' ? 'Partial' : inv.status === 'draft' ? 'Draft' : 'Due',
             paymentMethod: inv.payment_method,
+            notes: inv.notes,
+            assignedTechnicians: techRows.map(t => ({ id: t.technician_id, name: t.technician_name })),
             items: items.map((i) => ({
               id: i.id,
               serviceName: i.description || 'Service',
@@ -2347,6 +2361,28 @@ export default {
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
                 [`ii-${Date.now()}-${i}`, invId, itm.type || 'service', itm.description || itm.serviceName || 'Service', itmQty, itmPrice, itmQty * itmPrice, i]
               );
+            }
+          }
+
+          // Save assigned technicians
+          if (body.assignedTechnicians && Array.isArray(body.assignedTechnicians)) {
+            await conn.query(`
+              CREATE TABLE IF NOT EXISTS invoice_technicians (
+                invoice_id VARCHAR(50) NOT NULL,
+                technician_id VARCHAR(50) NOT NULL,
+                technician_name VARCHAR(191) NOT NULL,
+                PRIMARY KEY (invoice_id, technician_id),
+                INDEX idx_inv_tech_invoice (invoice_id)
+              ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `).catch(() => {});
+            await conn.query('DELETE FROM invoice_technicians WHERE invoice_id = ?', [invId]);
+            for (const tech of body.assignedTechnicians) {
+              if (tech.id && tech.name) {
+                await conn.query(
+                  'INSERT IGNORE INTO invoice_technicians (invoice_id, technician_id, technician_name) VALUES (?, ?, ?)',
+                  [invId, tech.id, tech.name]
+                );
+              }
             }
           }
 
@@ -2488,6 +2524,31 @@ export default {
           const [items] = await conn.query('SELECT * FROM invoice_items WHERE invoice_id = ? ORDER BY sort_order ASC', [id]);
           const [payments] = await conn.query('SELECT * FROM payments WHERE invoice_id = ? ORDER BY payment_date ASC', [id]);
 
+          // Update assigned technicians if provided
+          if (body.assignedTechnicians && Array.isArray(body.assignedTechnicians)) {
+            await conn.query(`
+              CREATE TABLE IF NOT EXISTS invoice_technicians (
+                invoice_id VARCHAR(50) NOT NULL,
+                technician_id VARCHAR(50) NOT NULL,
+                technician_name VARCHAR(191) NOT NULL,
+                PRIMARY KEY (invoice_id, technician_id),
+                INDEX idx_inv_tech_invoice (invoice_id)
+              ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+            `).catch(() => {});
+            await conn.query('DELETE FROM invoice_technicians WHERE invoice_id = ?', [id]);
+            for (const tech of body.assignedTechnicians) {
+              if (tech.id && tech.name) {
+                await conn.query(
+                  'INSERT IGNORE INTO invoice_technicians (invoice_id, technician_id, technician_name) VALUES (?, ?, ?)',
+                  [id, tech.id, tech.name]
+                );
+              }
+            }
+          }
+          const [techRows] = await conn.query(
+            'SELECT technician_id, technician_name FROM invoice_technicians WHERE invoice_id = ?', [id]
+          ).catch(() => [[]]);
+
           return {
             id: inv2.id,
             invoiceNumber: inv2.invoice_number,
@@ -2505,6 +2566,7 @@ export default {
             status: inv2.status === 'paid' ? 'Paid' : inv2.status === 'partial' ? 'Partial' : inv2.status === 'draft' ? 'Draft' : 'Due',
             paymentMethod: inv2.payment_method,
             notes: inv2.notes,
+            assignedTechnicians: techRows.map(t => ({ id: t.technician_id, name: t.technician_name })),
             items: items.map((i) => ({
               id: i.id,
               serviceName: i.description || 'Service',

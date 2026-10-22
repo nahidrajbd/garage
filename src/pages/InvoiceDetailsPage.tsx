@@ -254,6 +254,28 @@ export const InvoiceDetailsPage: React.FC = () => {
           </div>
         </div>
 
+        {/* Assigned Technicians */}
+        {invoice.assignedTechnicians && invoice.assignedTechnicians.length > 0 && (
+          <div className="py-3 border-b border-gray-200">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider font-heading mb-2">
+              Technicians Assigned
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {invoice.assignedTechnicians.map(tech => (
+                <span
+                  key={tech.id}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-red-50 border border-red-100 text-red-800 text-[11px] font-semibold rounded-lg"
+                >
+                  <span className="w-5 h-5 rounded-full bg-[#C1121F] text-white text-[9px] font-bold flex items-center justify-center shrink-0">
+                    {tech.name.charAt(0).toUpperCase()}
+                  </span>
+                  {tech.name}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Services & Work Items Table */}
         <div className="py-6">
           <table className="w-full text-left text-xs sm:text-sm">

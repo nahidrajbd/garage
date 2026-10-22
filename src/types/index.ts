@@ -122,6 +122,7 @@ export interface Invoice {
   convertedFromQuotation?: boolean;
   jobCardId?: string;
   jobCardNumber?: string;
+  assignedTechnicians?: { id: string; name: string }[];
   createdAt: string;
 }
 

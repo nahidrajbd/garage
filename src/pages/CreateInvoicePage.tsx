@@ -11,7 +11,8 @@ import {
   Wrench,
   Calculator,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  UserCog
 } from 'lucide-react';
 import { InvoiceStatusBadge } from '../components/common/Badge';
 import { useApp } from '../context/AppContext';
@@ -23,7 +24,8 @@ import {
   InvoiceItem, 
   PaymentMethod, 
   InvoiceStatus,
-  JobCard
+  JobCard,
+  Technician
 } from '../types';
 import { formatBDT, normalizePhoneDigits } from '../utils/formatters';
 
@@ -38,10 +40,12 @@ export const CreateInvoicePage: React.FC = () => {
   // Reference Data
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [servicesCatalog, setServicesCatalog] = useState<ServiceItem[]>([]);
+  const [technicians, setTechnicians] = useState<Technician[]>([]);
   const [invoicesCount, setInvoicesCount] = useState(0);
   const [linkedJobCard, setLinkedJobCard] = useState<JobCard | null>(null);
   const [existingPaid, setExistingPaid] = useState(0);
   const [existingStatus, setExistingStatus] = useState<InvoiceStatus | null>(null);
+  const [assignedTechIds, setAssignedTechIds] = useState<Set<string>>(new Set());
 
   // Form State
   const [invoiceNumber, setInvoiceNumber] = useState('');
@@ -68,14 +72,16 @@ export const CreateInvoicePage: React.FC = () => {
   useEffect(() => {
     const initData = async () => {
       try {
-        const [custList, srvList, invList] = await Promise.all([
+        const [custList, srvList, invList, techList] = await Promise.all([
           api.getCustomers(),
           api.getServices(),
-          api.getInvoices()
+          api.getInvoices(),
+          api.getTechnicians()
         ]);
         setCustomers(custList);
         setServicesCatalog(srvList);
         setInvoicesCount(invList.length);
+        setTechnicians(techList);
 
         if (id) {
           // Edit existing invoice
@@ -100,6 +106,9 @@ export const CreateInvoicePage: React.FC = () => {
             setNotes(existing.notes || '');
             setExistingPaid(existing.paid);
             setExistingStatus(existing.status);
+            if (existing.assignedTechnicians) {
+              setAssignedTechIds(new Set(existing.assignedTechnicians.map(t => t.id)));
+            }
           }
           return;
         }
@@ -286,6 +295,10 @@ export const CreateInvoicePage: React.FC = () => {
         quantity: Number(i.quantity) || 1
       }));
 
+      const assignedTechniciansPayload = technicians
+        .filter(t => assignedTechIds.has(t.id))
+        .map(t => ({ id: t.id, name: t.name }));
+
       if (id) {
         // Edit existing invoice - paid/due/status normally recompute server-
         // side from the already-recorded paid amount, not from this form.
@@ -301,6 +314,7 @@ export const CreateInvoicePage: React.FC = () => {
           items: itemsPayload,
           discount: discountNum,
           notes: notes.trim() || undefined,
+          assignedTechnicians: assignedTechniciansPayload,
           ...(isDraftEdit ? {
             paid: Math.min(paidNum, grandTotal),
             paymentMethod,
@@ -336,6 +350,7 @@ export const CreateInvoicePage: React.FC = () => {
         status: saveAsDraft ? 'Draft' : calculatedStatus,
         paymentMethod,
         notes: notes.trim() || undefined,
+        assignedTechnicians: assignedTechniciansPayload,
         jobCardId: linkedJobCard?.id || undefined,
         jobCardNumber: linkedJobCard?.jobCardNumber || undefined
       });
@@ -642,6 +657,71 @@ export const CreateInvoicePage: React.FC = () => {
             </tbody>
           </table>
         </div>
+      </div>
+
+      {/* Assigned Technicians Section */}
+      <div className="bg-white p-5 rounded-2xl border border-gray-200/80 shadow-2xs space-y-4">
+        <div className="flex items-center gap-2 pb-2 border-b border-gray-100">
+          <UserCog className="w-4 h-4 text-[#C1121F]" />
+          <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider font-heading">
+            Assigned Technicians
+          </h3>
+          {assignedTechIds.size > 0 && (
+            <span className="ml-auto px-2 py-0.5 bg-red-50 text-red-700 text-[11px] font-semibold rounded-md border border-red-100">
+              {assignedTechIds.size} selected
+            </span>
+          )}
+        </div>
+
+        {technicians.length === 0 ? (
+          <p className="text-xs text-gray-400 italic">No technicians found. Add technicians in Employee Management first.</p>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+            {technicians.map(tech => {
+              const selected = assignedTechIds.has(tech.id);
+              return (
+                <button
+                  key={tech.id}
+                  type="button"
+                  onClick={() => {
+                    setAssignedTechIds(prev => {
+                      const next = new Set(prev);
+                      if (next.has(tech.id)) next.delete(tech.id);
+                      else next.add(tech.id);
+                      return next;
+                    });
+                  }}
+                  className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                    selected
+                      ? 'bg-red-50 border-red-300 shadow-xs'
+                      : 'bg-gray-50 border-gray-200 hover:border-gray-300 hover:bg-gray-100'
+                  }`}
+                >
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-xs font-bold font-heading ${
+                    selected ? 'bg-[#C1121F] text-white' : 'bg-gray-200 text-gray-600'
+                  }`}>
+                    {tech.photo ? (
+                      <img src={tech.photo} alt={tech.name} className="w-8 h-8 rounded-full object-cover" />
+                    ) : (
+                      tech.name.charAt(0).toUpperCase()
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <p className={`text-xs font-semibold truncate ${
+                      selected ? 'text-red-800' : 'text-gray-800'
+                    }`}>{tech.name}</p>
+                    {tech.specialty && (
+                      <p className="text-[10px] text-gray-400 truncate">{tech.specialty}</p>
+                    )}
+                  </div>
+                  {selected && (
+                    <CheckCircle2 className="w-3.5 h-3.5 text-red-600 shrink-0 ml-auto" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Invoice Calculation & Payment Section */}
