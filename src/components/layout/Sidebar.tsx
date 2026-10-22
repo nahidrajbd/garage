@@ -1,9 +1,7 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import {
-  Home,
   LayoutDashboard,
-  MessageCircle,
   ClipboardCheck,
   ClipboardList,
   FileText,
@@ -16,8 +14,6 @@ import {
   Landmark,
   Settings as SettingsIcon,
   Wrench,
-  Phone,
-  MapPin,
   LogOut,
   ShieldCheck,
   UserCheck,
@@ -40,9 +36,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onNavClick }) => {
     navigate('/login', { replace: true });
   };
   const navItems = [
-    { label: 'Home', path: '/', icon: Home },
     { label: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
-    { label: 'Messages', path: '/messages', icon: MessageCircle },
     { label: 'Job Cards', path: '/job-cards', icon: ClipboardCheck },
     { label: 'Quotations', path: '/quotations', icon: ClipboardList },
     { label: 'Invoices', path: '/invoices', icon: FileText },
